@@ -521,6 +521,7 @@ $('settings-btn').onclick = () => {
   $('s-autolock').value = String(settings.autolock);
   bio.refreshSettings();
   updates.refreshSettings();
+  refreshScreenSetting();
   openSheet('settings-sheet');
 };
 $('s-autolock').onchange = () => {
@@ -814,6 +815,27 @@ window.stryxBio = (action, ok, payload) => {
       $('bio-error').textContent = payload;
     }
   }
+};
+
+/* ---------- Protection d'écran (captures / partage d'écran) ---------- */
+
+function refreshScreenSetting() {
+  const ok = !!(native && native.screenProtected);
+  $('s-screen').hidden = !ok;
+  if (!ok) return;
+  const on = native.screenProtected();
+  $('s-screen-title').textContent = on ? 'Protection d\'écran : activée' : 'Protection d\'écran : désactivée';
+  $('s-screen-sub').textContent = on
+    ? 'Captures et partage d\'écran bloqués (écran noir sur Discord). Touchez pour autoriser le stream.'
+    : 'Stream et captures autorisés : attention à ne pas afficher de mot de passe.';
+  $('s-screen').classList.toggle('warn-tile', !on);
+}
+$('s-screen').onclick = () => {
+  const on = native.screenProtected();
+  if (on && !confirm('Autoriser les captures et le partage d\'écran ?\n\nTout ce qui est affiché pourra être vu par les personnes qui regardent ton stream.')) return;
+  native.setScreenProtected(!on);
+  refreshScreenSetting();
+  toast(on ? 'Stream autorisé · pense à la remettre après' : 'Protection d\'écran réactivée');
 };
 
 /* ---------- Mises à jour depuis l'application (Android) ---------- */

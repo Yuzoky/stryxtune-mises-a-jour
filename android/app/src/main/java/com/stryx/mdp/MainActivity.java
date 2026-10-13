@@ -56,8 +56,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Masque le contenu dans les applis récentes et bloque les captures d'écran.
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        // Protection d'écran (captures, partage d'écran, applis récentes) : activée par défaut,
+        // désactivable dans les paramètres pour pouvoir streamer l'appli (Discord…).
+        applySecure(getSharedPreferences("stryxmdp_ui", MODE_PRIVATE).getBoolean("secure", true));
 
         web = new WebView(this);
         web.setBackgroundColor(Color.BLACK);
@@ -115,6 +116,11 @@ public class MainActivity extends Activity {
         web.evaluateJavascript("window.stryxBack ? window.stryxBack() : false", value -> {
             if (!"true".equals(value)) finish();
         });
+    }
+
+    private void applySecure(boolean secure) {
+        if (secure) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
     }
 
     @Override
@@ -223,6 +229,17 @@ public class MainActivity extends Activity {
                     }
                 }, CLIPBOARD_CLEAR_MS);
             });
+        }
+
+        @JavascriptInterface
+        public boolean screenProtected() {
+            return getSharedPreferences("stryxmdp_ui", MODE_PRIVATE).getBoolean("secure", true);
+        }
+
+        @JavascriptInterface
+        public void setScreenProtected(boolean secure) {
+            getSharedPreferences("stryxmdp_ui", MODE_PRIVATE).edit().putBoolean("secure", secure).apply();
+            handler.post(() -> applySecure(secure));
         }
 
         @JavascriptInterface

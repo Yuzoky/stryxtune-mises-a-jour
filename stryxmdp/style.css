@@ -243,6 +243,8 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: #fff; margin: 0;
 .tile span { font-size: 12px; color: var(--muted); }
 .tile:active { border-color: var(--stroke-hi); }
 .tile.danger b { color: var(--danger); }
+.tile.warn-tile { border-color: rgba(255, 181, 71, 0.5); }
+.tile.warn-tile b { color: #ffb547; }
 
 /* ---------- Onglets ---------- */
 .tabs { display: flex; padding: 4px; gap: 4px; margin-bottom: 12px; border-radius: 14px; }
