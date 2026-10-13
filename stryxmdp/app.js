@@ -81,8 +81,16 @@ function safeUrl(u) {
   } catch { return ''; }
 }
 
+// Présent uniquement dans l'application Android (pont natif).
+const native = window.StryxAndroid || null;
+
 async function copy(text, label) {
   if (!text) return;
+  if (native) {
+    native.copy(text);
+    toast(`${label} copié · effacé dans 30 s`);
+    return;
+  }
   try {
     await navigator.clipboard.writeText(text);
     toast(`${label} copié · effacé dans 30 s`);
@@ -409,12 +417,28 @@ function regen() {
 }
 ['gen-len', 'g-up', 'g-low', 'g-num', 'g-sym'].forEach((id) => $(id).addEventListener('input', regen));
 $('gen-again').onclick = regen;
-$('gen-open').onclick = () => { regen(); openSheet('gen-sheet'); };
+// Deux usages : depuis le formulaire (« Utiliser ») ou depuis l'écran principal (« Enregistrer »).
+let genFromForm = false;
+function openGenerator(fromForm) {
+  genFromForm = fromForm;
+  $('gen-use').textContent = fromForm ? 'Utiliser' : 'Enregistrer';
+  regen();
+  openSheet('gen-sheet');
+}
+$('gen-open').onclick = () => openGenerator(true);
+$('quick-gen').onclick = () => openGenerator(false);
+$('gen-copy').onclick = () => copy($('gen-out').textContent, 'Mot de passe');
+$('gen-out').onclick = () => copy($('gen-out').textContent, 'Mot de passe');
 $('gen-use').onclick = () => {
-  $('f-pass').value = $('gen-out').textContent;
-  $('f-pass').type = 'text';
-  setStrength($('strength-f'), $('f-pass').value);
+  const pw = $('gen-out').textContent;
   closeSheet('gen-sheet');
+  if (!genFromForm) {
+    // Nouvel identifiant pré-rempli avec le mot de passe généré : il ne reste qu'à le nommer.
+    openEdit(null);
+  }
+  $('f-pass').value = pw;
+  $('f-pass').type = 'text';
+  setStrength($('strength-f'), pw);
 };
 
 /* ---------- Paramètres ---------- */
@@ -429,10 +453,15 @@ $('s-autolock').onchange = () => {
 $('s-export').onclick = () => {
   const blob = storage.get(STORE_KEY);
   if (!blob) return;
+  const name = `stryxmdp-${new Date().toISOString().slice(0, 10)}.json`;
+  if (native) {
+    native.saveFile(name, JSON.stringify(blob));
+    return;
+  }
   const file = new Blob([JSON.stringify(blob)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
-  a.download = `stryxmdp-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = name;
   document.body.append(a);
   a.click();
   a.remove();
@@ -523,7 +552,15 @@ if (!window.crypto || !crypto.subtle) {
   $('lock-btn').disabled = true;
 }
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+// Bouton « retour » d'Android : ferme la fenêtre ouverte au lieu de quitter l'appli.
+window.stryxBack = () => {
+  const open = [...document.querySelectorAll('.sheet')].filter((s) => s.classList.contains('open')).pop();
+  if (!open) return false;
+  closeSheet(open.id);
+  return true;
+};
+
+if (!native && 'serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
@@ -536,6 +573,7 @@ let installPrompt = null;
 // Android / Chrome : le navigateur propose l'installation, on la déclenche depuis notre bouton.
 addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
+  if (native) return;
   installPrompt = e;
   $('install-btn').hidden = false;
 });
@@ -544,7 +582,7 @@ addEventListener('appinstalled', () => {
   $('install-btn').hidden = true;
   toast('StryxMDP est installé sur votre écran d\'accueil');
 });
-if (isIOS && !isStandalone()) $('install-btn').hidden = false;
+if (isIOS && !isStandalone() && !native) $('install-btn').hidden = false;
 
 $('install-btn').onclick = async () => {
   if (installPrompt) {

@@ -66,9 +66,10 @@
     <ul id="list" class="list"></ul>
     <div id="empty" class="empty" hidden>
       <p>Aucun mot de passe enregistré.</p>
-      <p class="muted">Touchez <b>+</b> pour en ajouter un.</p>
+      <p class="muted">Touchez <b>⚡ Générer</b> pour créer un mot de passe solide, ou <b>+</b> pour en ajouter un.</p>
     </div>
 
+    <button class="quick-gen" id="quick-gen">⚡ Générer un mot de passe</button>
     <button class="fab" id="add-btn" aria-label="Ajouter">+</button>
   </section>
 
@@ -127,7 +128,7 @@
     <div class="sheet-body glass">
       <div class="grab"></div>
       <h2>Générateur</h2>
-      <div class="gen-out mono" id="gen-out"></div>
+      <div class="gen-out mono" id="gen-out" role="button" title="Toucher pour copier"></div>
       <div id="strength-g" class="strength"><i></i></div>
       <label class="field"><span>Longueur : <b id="gen-len-v">20</b></span><input type="range" id="gen-len" min="8" max="64" value="20"></label>
       <div class="toggles">
@@ -137,7 +138,8 @@
         <label><input type="checkbox" id="g-sym" checked> !@#</label>
       </div>
       <div class="row">
-        <button class="btn" id="gen-again">↻ Regénérer</button>
+        <button class="btn" id="gen-again" aria-label="Regénérer">↻</button>
+        <button class="btn" id="gen-copy">Copier</button>
         <button class="btn primary" id="gen-use">Utiliser</button>
       </div>
     </div>

@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+def buildNumber = (project.findProperty('versionCode') ?: '1') as int
+
+android {
+    namespace 'com.stryx.mdp'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.stryx.mdp'
+        minSdk 24
+        targetSdk 34
+        // Numéro de build fourni par GitHub Actions : chaque version s'installe par-dessus la précédente.
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+
+    signingConfigs {
+        release {
+            // La clé n'est jamais dans le dépôt : le workflow la fournit (secrets GitHub).
+            storeFile file(System.getenv('KS_FILE') ?: 'release.jks')
+            storePassword System.getenv('KS_PASSWORD')
+            keyAlias 'stryxmdp'
+            keyPassword System.getenv('KS_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    // Les fichiers de l'appli (dossier stryxmdp/) sont embarqués dans l'APK : tout fonctionne hors ligne.
+    sourceSets {
+        main {
+            assets.srcDirs = ['../../stryxmdp']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
