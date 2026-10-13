@@ -236,9 +236,12 @@ const Planning = (() => {
       const leave = slots.find((s) => s.cp !== undefined);
       const cp = leave ? leave.cp : undefined;
       if (!work.length && cp === undefined) { resting.push({ name: p[0], isMe }); continue; }
+      work.sort((x, y) => x.start - y.start);
       rows.push({ name: p[0], isMe, work, cp, first: work.length ? work[0].start : 99999 });
     }
-    rows.sort((a, b) => (b.isMe - a.isMe) || (a.first - b.first) || a.name.localeCompare(b.name));
+    // Ordre d'arrivée : premier créneau de la journée, puis heure de départ.
+    const lastEnd = (r) => (r.work.length ? r.work[r.work.length - 1].end : 99999);
+    rows.sort((a, b) => (a.first - b.first) || (lastEnd(a) - lastEnd(b)) || a.name.localeCompare(b.name));
 
     const all = rows.flatMap((r) => r.work);
     let from = all.length ? Math.floor(Math.min(...all.map((s) => s.start)) / 60) * 60 : 9 * 60;
