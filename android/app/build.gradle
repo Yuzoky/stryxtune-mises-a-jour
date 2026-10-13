@@ -19,7 +19,7 @@ android {
 
     signingConfigs {
         release {
-            // La clé n'est jamais dans le dépôt : le workflow la fournit (secrets GitHub).
+            // Clé fournie par le workflow : android/signing/stryxmdp.p12, protégée par un secret GitHub.
             storeFile file(System.getenv('KS_FILE') ?: 'release.jks')
             storePassword System.getenv('KS_PASSWORD')
             keyAlias 'stryxmdp'
