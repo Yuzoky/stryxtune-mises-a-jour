@@ -1,5 +1,5 @@
 // Page Planning : affiche planning.json semaine par semaine.
-// Format : { "updated": "AAAA-MM-JJ", "entries": [
+// Format : { "updated": "AAAA-MM-JJ", "weeks": [{ "start": "AAAA-MM-JJ" (lundi), "contract": "HH:MM" }], "entries": [
 //   { "date": "AAAA-MM-JJ", "start": "HH:MM", "end": "HH:MM", "label": "…", "place": "…", "note": "…" },
 //   { "date": "AAAA-MM-JJ", "off": true, "label": "Repos" } ] }
 'use strict';
@@ -120,8 +120,10 @@ const Planning = (() => {
       items.push(li);
     }
     $('days').replaceChildren(...items);
+    const week = (data.weeks || []).find((w) => w.start === iso(weekStart));
+    const contract = week && week.contract ? ` · contrat ${fmtDur(minutes(week.contract))}` : '';
     $('week-sub').textContent = total
-      ? `${fmtDur(total)} sur ${worked} jour${worked > 1 ? 's' : ''}`
+      ? `${fmtDur(total)} sur ${worked} jour${worked > 1 ? 's' : ''}${contract}`
       : 'Aucun créneau cette semaine';
     $('week-today').hidden = iso(weekStart) === iso(mondayOf(new Date()));
   }
