@@ -156,9 +156,9 @@ final class Biometrics {
 
                     @Override
                     public void onAuthenticationError(int code, CharSequence message) {
+                        // Le bouton « Mot de passe » passe par son propre écouteur, pas par ici.
                         boolean cancelled = code == BiometricPrompt.BIOMETRIC_ERROR_CANCELED
-                                || code == BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED
-                                || code == BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON;
+                                || code == BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED;
                         if ("enable".equals(action)) disable();
                         callback.result(action, false, cancelled ? "cancel" : String.valueOf(message));
                     }
