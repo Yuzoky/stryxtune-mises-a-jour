@@ -244,6 +244,42 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: #fff; margin: 0;
 .tile:active { border-color: var(--stroke-hi); }
 .tile.danger b { color: var(--danger); }
 
+/* ---------- Onglets ---------- */
+.tabs { display: flex; padding: 4px; gap: 4px; margin-bottom: 12px; border-radius: 14px; }
+.tab {
+  flex: 1; font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer;
+  padding: 10px 8px; border: 0; border-radius: 10px; background: none; transition: background 0.2s, color 0.2s;
+}
+.tab.active { color: #000; background: #fff; box-shadow: 0 0 16px rgba(255, 255, 255, 0.2); }
+
+/* ---------- Planning ---------- */
+.week-nav { display: flex; align-items: center; gap: 10px; }
+.week-label { flex: 1; text-align: center; display: flex; flex-direction: column; }
+.week-label b { font-size: 17px; letter-spacing: 0.02em; }
+.week-label span { font-size: 12px; color: var(--muted); }
+.today-chip { display: block; margin: 10px auto 0; }
+.plan-next { margin-top: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; border-color: var(--stroke-hi);
+  background: radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.10), transparent 60%), var(--glass); }
+.plan-next small { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.plan-next b { font-size: 18px; }
+.plan-next span { font-size: 13px; color: var(--muted); }
+.days { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.day { display: flex; gap: 14px; padding: 12px 14px; animation: rise 0.35s both; }
+.day.today { border-color: #fff; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 0 26px rgba(255, 255, 255, 0.12); }
+.day.past { opacity: 0.45; }
+.day-date { flex: none; width: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.day-date small { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.day-date b { font-size: 24px; line-height: 1.1; }
+.day.today .day-date small { color: #fff; }
+.day-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.shift { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--stroke); }
+.shift-time { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shift-info { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.shift-info span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.shift-dur { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rest { color: var(--muted); font-size: 14px; padding: 8px 2px; }
+.plan-foot { text-align: center; margin: 18px 0 0; }
+
 /* ---------- Mise à jour ---------- */
 .update-bar {
   position: fixed; z-index: 9; left: 12px; right: 12px; top: calc(10px + var(--safe-t));

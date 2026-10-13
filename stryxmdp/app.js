@@ -221,6 +221,7 @@ async function onUnlock(e, bioPassword) {
     $('lock').hidden = true;
     $('vault').hidden = false;
     render();
+    showTab(settings.tab === 'plan' ? 'plan' : 'pw');
     armAutolock();
   } catch (ex) {
     if (viaBio) {
@@ -357,6 +358,18 @@ document.querySelectorAll('[data-copy]').forEach((b) => {
 });
 
 $('v-edit').onclick = () => { closeSheet('view-sheet'); openEdit(state.current); };
+
+/* ---------- Onglets ---------- */
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  $('tab-pw').hidden = name !== 'pw';
+  $('tab-plan').hidden = name !== 'plan';
+  if (name === 'plan') Planning.show();
+  settings.tab = name;
+  storage.set(SETTINGS_KEY, settings);
+}
+document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
 
 /* ---------- Ajout / modification ---------- */
 
