@@ -76,15 +76,23 @@ const Planning = (() => {
   }
 
   // Lit un code planning (STRYXPLAN: JSON en base64, STRYXPLAN2: équipe compressée) ou du JSON brut.
+  // Tolérant au copier-coller : texte autour, retours à la ligne, ``` … ; code compressé ou non.
   async function decode(code) {
     let text = code.trim();
-    if (/^STRYXPLAN2:/i.test(text)) {
-      const obj = JSON.parse(await inflate(fromB64(text.slice(11))));
-      if (!obj.week || !Array.isArray(obj.people)) throw new Error('format');
+    const m = text.match(/STRYXPLAN2?\s*:\s*([A-Za-z0-9+/=_\-\s]+)/i);
+    if (m) {
+      const bytes = fromB64(m[1]);
+      if (bytes[0] === 0x7b) text = new TextDecoder().decode(bytes); // JSON non compressé
+      else {
+        if (typeof DecompressionStream === 'undefined') throw new Error('inflate');
+        try { text = await inflate(bytes); } catch { throw new Error('inflate'); }
+      }
+    }
+    const obj = JSON.parse(text);
+    if (Array.isArray(obj.people)) {
+      if (!obj.week) throw new Error('format');
       return fromTeam(obj);
     }
-    if (/^STRYXPLAN:/i.test(text)) text = new TextDecoder().decode(fromB64(text.slice(10)));
-    const obj = JSON.parse(text);
     const entries = validEntries(obj.entries);
     if (!entries.length) throw new Error('vide');
     return { updated: obj.updated || '', weeks: Array.isArray(obj.weeks) ? obj.weeks : [], entries, teams: {} };

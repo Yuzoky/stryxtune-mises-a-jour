@@ -379,6 +379,7 @@ $('plan-import').onclick = () => {
   $('plan-code').value = '';
   $('plan-error').textContent = '';
   $('plan-clear').hidden = !state.planning;
+  $('plan-version').textContent = native && native.appVersion ? `StryxMDP ${native.appVersion()}` : '';
   openSheet('plan-sheet');
 };
 $('plan-form').addEventListener('submit', async (e) => {
@@ -386,8 +387,10 @@ $('plan-form').addEventListener('submit', async (e) => {
   let add;
   try {
     add = await Planning.decode($('plan-code').value);
-  } catch {
-    $('plan-error').textContent = 'Code non reconnu : copiez bien tout le code envoyé par Claude (il commence par STRYXPLAN:).';
+  } catch (ex) {
+    $('plan-error').textContent = ex && ex.message === 'inflate'
+      ? 'Ce téléphone ne lit pas les codes compressés : demandez à Claude le « code long ».'
+      : 'Code incomplet ou abîmé : recopiez tout le code envoyé par Claude, du début (STRYXPLAN) jusqu\'à la fin.';
     return;
   }
   state.planning = Planning.merge(state.planning, add);
