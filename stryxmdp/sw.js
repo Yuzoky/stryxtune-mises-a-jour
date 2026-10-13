@@ -1,5 +1,5 @@
 // Cache hors ligne : l'application fonctionne sans connexion une fois installée.
-const CACHE = 'stryxmdp-v8';
+const CACHE = 'stryxmdp-v9';
 const FILES = [
   './', 'index.html', 'style.css', 'crypto.js', 'importcsv.js', 'planning.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',

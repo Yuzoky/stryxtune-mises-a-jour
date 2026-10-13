@@ -379,7 +379,7 @@ $('plan-import').onclick = () => {
   $('plan-code').value = '';
   $('plan-error').textContent = '';
   $('plan-clear').hidden = !state.planning;
-  $('plan-version').textContent = native && native.appVersion ? `StryxMDP ${native.appVersion()}` : '';
+  $('plan-version').textContent = native && native.appVersion ? `Stryx Hub ${native.appVersion()}` : '';
   openSheet('plan-sheet');
 };
 $('plan-form').addEventListener('submit', async (e) => {
@@ -873,7 +873,7 @@ window.stryxUpdate = (event, payload) => {
   switch (event) {
     case 'available':
       $('update-title').textContent = 'Mise à jour disponible';
-      $('update-sub').textContent = `StryxMDP ${payload} · vos mots de passe sont conservés`;
+      $('update-sub').textContent = `Stryx Hub ${payload} · vos mots de passe sont conservés`;
       $('update-bar').hidden = false;
       if (updates.manual) closeSheet('settings-sheet');
       updates.reset();
@@ -881,7 +881,7 @@ window.stryxUpdate = (event, payload) => {
     case 'none':
       if (updates.manual) {
         $('s-update-sub').textContent = `Version ${payload} · à jour ✓`;
-        toast('StryxMDP est à jour');
+        toast('Stryx Hub est à jour');
       }
       break;
     case 'progress':
@@ -894,7 +894,7 @@ window.stryxUpdate = (event, payload) => {
       break;
     case 'permission':
       updates.reset();
-      $('update-sub').textContent = 'Autorisez StryxMDP à installer des applis, puis revenez et touchez « Mettre à jour ».';
+      $('update-sub').textContent = 'Autorisez Stryx Hub à installer des applis, puis revenez et touchez « Mettre à jour ».';
       break;
     case 'error':
       updates.reset();
@@ -920,7 +920,7 @@ addEventListener('beforeinstallprompt', (e) => {
 addEventListener('appinstalled', () => {
   installPrompt = null;
   $('install-btn').hidden = true;
-  toast('StryxMDP est installé sur votre écran d\'accueil');
+  toast('Stryx Hub est installé sur votre écran d\'accueil');
 });
 if (isIOS && !isStandalone() && !native) $('install-btn').hidden = false;
 

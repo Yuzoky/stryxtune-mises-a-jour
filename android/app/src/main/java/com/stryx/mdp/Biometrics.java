@@ -136,7 +136,7 @@ final class Biometrics {
         cancel = new CancellationSignal();
         Executor executor = activity.getMainExecutor();
         BiometricPrompt prompt = new BiometricPrompt.Builder(activity)
-                .setTitle("StryxMDP")
+                .setTitle("Stryx Hub")
                 .setSubtitle(subtitle)
                 .setNegativeButton("Mot de passe", executor,
                         (dialog, which) -> callback.result(action, false, "cancel"))

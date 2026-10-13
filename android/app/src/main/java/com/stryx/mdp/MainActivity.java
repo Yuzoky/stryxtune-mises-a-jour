@@ -214,7 +214,7 @@ public class MainActivity extends Activity {
         public void copy(String text) {
             handler.post(() -> {
                 ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData clip = ClipData.newPlainText("StryxMDP", text);
+                ClipData clip = ClipData.newPlainText("Stryx Hub", text);
                 // Android 13+ : le contenu copié n'apparaît pas dans l'aperçu du presse-papiers.
                 PersistableBundle extras = new PersistableBundle();
                 extras.putBoolean(Build.VERSION.SDK_INT >= 33 ? ClipDescription.EXTRA_IS_SENSITIVE : "android.content.extra.IS_SENSITIVE", true);

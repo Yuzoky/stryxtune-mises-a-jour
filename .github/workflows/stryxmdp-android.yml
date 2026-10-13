@@ -75,8 +75,8 @@ jobs:
           gh release create stryxmdp StryxMDP.apk version.txt \
             --prerelease \
             --target "${{ github.sha }}" \
-            --title "StryxMDP (Android) 1.0.${{ github.run_number }}" \
-            --notes "Application Android StryxMDP. Sur le téléphone : téléchargez **StryxMDP.apk** ci-dessous, ouvrez-le puis touchez **Installer** (autorisez l'installation d'applications inconnues si Android le demande). Ensuite, les mises à jour se font directement depuis l'appli."
+            --title "Stryx Hub (Android) 1.0.${{ github.run_number }}" \
+            --notes "Application Android Stryx Hub (mots de passe et planning). Sur le téléphone : téléchargez **StryxMDP.apk** ci-dessous, ouvrez-le puis touchez **Installer** (autorisez l'installation d'applications inconnues si Android le demande). Ensuite, les mises à jour se font directement depuis l'appli."
 
       # Première fois seulement : conserve la clé (protégée par le secret) dans le dépôt.
       - name: Conserver la clé de signature

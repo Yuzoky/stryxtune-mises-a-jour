@@ -53,7 +53,7 @@ body {
 @keyframes float { 50% { transform: translateY(-6px); box-shadow: 0 0 80px rgba(255, 255, 255, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.1); } }
 .brand { margin: 22px 0 0; font-size: 30px; font-weight: 800; letter-spacing: 0.32em; padding-left: 0.32em; }
 .brand span { color: var(--muted); font-weight: 300; }
-.sub { margin: 2px 0 26px; font-size: 11px; letter-spacing: 0.6em; padding-left: 0.6em; color: var(--muted); }
+.sub { margin: 2px 0 26px; font-size: 11px; letter-spacing: 0.32em; padding-left: 0.32em; color: var(--muted); }
 .lock-card { width: 100%; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 .lock-card.shake { animation: shake 0.35s; }
 @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }

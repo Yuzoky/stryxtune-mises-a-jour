@@ -1,7 +1,7 @@
 {
-  "name": "StryxMDP",
-  "short_name": "StryxMDP",
-  "description": "Gestionnaire de mots de passe chiffré ultra sécurisé.",
+  "name": "Stryx Hub",
+  "short_name": "Stryx Hub",
+  "description": "Mots de passe et planning, chiffrés sur ton téléphone.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
