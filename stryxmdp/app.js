@@ -1,7 +1,7 @@
 'use strict';
 
-const STORE_KEY = 'stryx-vault';
-const SETTINGS_KEY = 'stryx-vault-settings';
+const STORE_KEY = 'stryxmdp';
+const SETTINGS_KEY = 'stryxmdp-settings';
 const CLIPBOARD_CLEAR_MS = 30000;
 const CATEGORIES = [
   { id: 'jeux', label: 'Jeux', icon: '🎮' },
@@ -432,7 +432,7 @@ $('s-export').onclick = () => {
   const file = new Blob([JSON.stringify(blob)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
-  a.download = `stryx-vault-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `stryxmdp-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(a);
   a.click();
   a.remove();
@@ -453,7 +453,7 @@ $('file-in').onchange = async () => {
   if (!f) return;
   try {
     const blob = JSON.parse(await f.text());
-    if (!blob || blob.app !== 'stryx-vault') throw new Error();
+    if (!blob || blob.app !== 'stryxmdp') throw new Error();
     lock();
     state.pendingImport = blob;
     lockMode();
@@ -526,6 +526,36 @@ if (!window.crypto || !crypto.subtle) {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+/* ---------- Installation (icône sur l'écran d'accueil) ---------- */
+
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let installPrompt = null;
+
+// Android / Chrome : le navigateur propose l'installation, on la déclenche depuis notre bouton.
+addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $('install-btn').hidden = false;
+});
+addEventListener('appinstalled', () => {
+  installPrompt = null;
+  $('install-btn').hidden = true;
+  toast('StryxMDP est installé sur votre écran d\'accueil');
+});
+if (isIOS && !isStandalone()) $('install-btn').hidden = false;
+
+$('install-btn').onclick = async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    await installPrompt.userChoice.catch(() => {});
+    installPrompt = null;
+    $('install-btn').hidden = true;
+  } else {
+    openSheet('ios-sheet');
+  }
+};
 
 starfield();
 lockMode();

@@ -36,12 +36,12 @@ const VaultCrypto = (() => {
   async function encrypt(session, data) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, session.key, enc.encode(JSON.stringify(data)));
-    return { app: 'stryx-vault', v: 1, kdf: 'PBKDF2-SHA256', iterations: session.iterations, salt: session.salt, iv: toB64(iv), data: toB64(ct) };
+    return { app: 'stryxmdp', v: 1, kdf: 'PBKDF2-SHA256', iterations: session.iterations, salt: session.salt, iv: toB64(iv), data: toB64(ct) };
   }
 
   // Lève une erreur si le mot de passe est faux (échec d'authentification GCM).
   async function open(password, blob) {
-    if (!blob || blob.app !== 'stryx-vault' || !blob.salt || !blob.iv || !blob.data) throw new Error('format');
+    if (!blob || blob.app !== 'stryxmdp' || !blob.salt || !blob.iv || !blob.data) throw new Error('format');
     const iterations = blob.iterations || ITERATIONS;
     const key = await deriveKey(password, fromB64(blob.salt), iterations);
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(blob.iv) }, key, fromB64(blob.data));

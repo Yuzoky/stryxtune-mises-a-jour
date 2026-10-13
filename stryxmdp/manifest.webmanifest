@@ -1,7 +1,7 @@
 {
-  "name": "STRYX Vault",
-  "short_name": "STRYX Vault",
-  "description": "Gestionnaire de mots de passe chiffré, style STRYXTUNE.",
+  "name": "StryxMDP",
+  "short_name": "StryxMDP",
+  "description": "Gestionnaire de mots de passe chiffré ultra sécurisé.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",

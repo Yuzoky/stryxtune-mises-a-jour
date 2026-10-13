@@ -1,4 +1,4 @@
-/* STRYX Vault — style STRYXTUNE : noir spatial, vortex monochrome, tuiles verre. */
+/* StryxMDP — noir spatial, vortex monochrome, tuiles verre. */
 :root {
   --bg: #000003;
   --glass: rgba(255, 255, 255, 0.045);
@@ -46,11 +46,11 @@ body {
 #lock { display: grid; place-items: center; padding: calc(24px + var(--safe-t)) 16px calc(24px + var(--safe-b)); }
 .lock-inner { width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; }
 .vortex {
-  width: 132px; height: 132px; border-radius: 50%;
-  box-shadow: 0 0 60px rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  animation: spin 40s linear infinite;
+  width: 132px; height: 132px; border-radius: 30px;
+  box-shadow: 0 0 60px rgba(255, 255, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: float 5s ease-in-out infinite;
 }
-@keyframes spin { to { transform: rotate(-360deg); } }
+@keyframes float { 50% { transform: translateY(-6px); box-shadow: 0 0 80px rgba(255, 255, 255, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.1); } }
 .brand { margin: 22px 0 0; font-size: 30px; font-weight: 800; letter-spacing: 0.32em; padding-left: 0.32em; }
 .brand span { color: var(--muted); font-weight: 300; }
 .sub { margin: 2px 0 26px; font-size: 11px; letter-spacing: 0.6em; padding-left: 0.6em; color: var(--muted); }
@@ -104,6 +104,8 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: #fff; margin: 0;
   border: 2px solid #000; border-right-color: transparent; border-radius: 50%; animation: rot 0.7s linear infinite;
 }
 @keyframes rot { to { transform: rotate(360deg); } }
+.btn.install { flex: none; width: 100%; margin-top: 16px; box-shadow: 0 0 18px rgba(255, 255, 255, 0.08); }
+.steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
 .link { margin-top: 18px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
 .icon-btn {
@@ -118,7 +120,7 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: #fff; margin: 0;
 #vault { max-width: 640px; margin: 0 auto; padding: calc(12px + var(--safe-t)) 16px calc(110px + var(--safe-b)); }
 .topbar { display: flex; align-items: center; gap: 8px; padding: 6px 0 14px; }
 .brand-sm { flex: 1; display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.22em; font-size: 15px; }
-.brand-sm img { width: 34px; height: 34px; border-radius: 50%; animation: spin 40s linear infinite; }
+.brand-sm img { width: 34px; height: 34px; border-radius: 9px; }
 .brand-sm span { color: var(--muted); font-weight: 300; }
 
 .search { display: flex; align-items: center; gap: 8px; padding: 0 14px; }

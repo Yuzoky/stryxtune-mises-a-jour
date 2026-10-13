@@ -7,9 +7,9 @@
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="STRYX Vault">
+  <meta name="apple-mobile-web-app-title" content="StryxMDP">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>STRYX Vault</title>
+  <title>StryxMDP</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -22,8 +22,8 @@
   <section id="lock" class="screen">
     <div class="lock-inner">
       <img src="icons/icon-512.png" alt="" class="vortex">
-      <h1 class="brand">STRYX<span>TUNE</span></h1>
-      <p class="sub" id="lock-sub">VAULT</p>
+      <h1 class="brand">STRYX<span>MDP</span></h1>
+      <p class="sub" id="lock-sub">COFFRE-FORT</p>
 
       <form id="lock-form" class="glass lock-card" autocomplete="off">
         <p id="lock-hint" class="hint"></p>
@@ -42,6 +42,7 @@
         <button class="btn primary" id="lock-btn" type="submit">Déverrouiller</button>
         <p id="lock-error" class="error" role="alert"></p>
       </form>
+      <button id="install-btn" class="btn install" type="button" hidden>📲 Installer l'appli sur l'écran d'accueil</button>
       <button id="restore-btn" class="link" type="button">Restaurer une sauvegarde</button>
     </div>
   </section>
@@ -49,7 +50,7 @@
   <!-- ===== Coffre ===== -->
   <section id="vault" class="screen" hidden>
     <header class="topbar">
-      <div class="brand-sm"><img src="icons/icon-192.png" alt="">STRYX<span>VAULT</span></div>
+      <div class="brand-sm"><img src="icons/icon-192.png" alt="">STRYX<span>MDP</span></div>
       <button class="icon-btn" id="settings-btn" aria-label="Paramètres">⚙</button>
       <button class="icon-btn" id="lock-now" aria-label="Verrouiller">🔒</button>
     </header>
@@ -159,7 +160,7 @@
       <button class="tile glass" id="s-import"><b>Importer une sauvegarde</b><span>Remplace le coffre actuel</span></button>
       <button class="tile glass" id="s-change"><b>Changer le mot de passe maître</b><span>Rechiffre tout le coffre</span></button>
       <button class="tile glass danger" id="s-wipe"><b>Effacer le coffre</b><span>Supprime toutes les données de cet appareil</span></button>
-      <p class="muted small">STRYX Vault fonctionne 100 % hors ligne. Vos données restent sur ce téléphone, chiffrées en AES-256-GCM. Sans le mot de passe maître, elles sont irrécupérables.</p>
+      <p class="muted small">StryxMDP fonctionne 100 % hors ligne. Vos données restent sur ce téléphone, chiffrées en AES-256-GCM. Sans le mot de passe maître, elles sont irrécupérables.</p>
       <div class="row"><button class="btn" data-close>Fermer</button></div>
     </div>
   </div>
@@ -181,7 +182,22 @@
     </form>
   </div>
 
-  <input type="file" id="file-in" accept=".json,.stryxvault,application/json" hidden>
+  <!-- ===== Feuille : installation iPhone ===== -->
+  <div class="sheet" id="ios-sheet" hidden>
+    <div class="sheet-body glass">
+      <div class="grab"></div>
+      <h2>Ajouter StryxMDP à l'écran d'accueil</h2>
+      <ol class="steps">
+        <li>Touchez le bouton <b>Partager</b> en bas de Safari.</li>
+        <li>Faites défiler et choisissez <b>Sur l'écran d'accueil</b>.</li>
+        <li>Touchez <b>Ajouter</b> : l'icône StryxMDP apparaît sur votre téléphone.</li>
+      </ol>
+      <p class="muted small">Sur iPhone, l'installation n'est possible que depuis Safari.</p>
+      <div class="row"><button class="btn primary" data-close>Compris</button></div>
+    </div>
+  </div>
+
+  <input type="file" id="file-in" accept=".json,application/json" hidden>
   <div id="toast" class="toast" role="status"></div>
 
   <script src="crypto.js"></script>
