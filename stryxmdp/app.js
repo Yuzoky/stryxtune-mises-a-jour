@@ -488,6 +488,81 @@ $('s-export').onclick = () => {
   toast('Sauvegarde exportée (chiffrée)');
 };
 
+/* ---------- Import de mots de passe (CSV) ---------- */
+
+let csvPending = [];
+const sameEntry = (a, b) => a.title.toLowerCase() === b.title.toLowerCase() && a.user === b.user && a.pass === b.pass;
+
+function csvReset() {
+  csvPending = [];
+  $('csv-n').textContent = '';
+  $('csv-detail').textContent = '';
+  $('csv-intro').hidden = false;
+  $('csv-result').hidden = true;
+  $('csv-go').hidden = true;
+  $('csv-pick').textContent = 'Choisir un fichier';
+  $('csv-error').textContent = '';
+}
+
+$('s-csv').onclick = () => {
+  closeSheet('settings-sheet');
+  csvReset();
+  openSheet('csv-sheet');
+};
+$('csv-pick').onclick = () => { $('csv-in').value = ''; $('csv-in').click(); };
+$('csv-in').onchange = async () => {
+  const f = $('csv-in').files[0];
+  if (!f) return;
+  csvReset();
+  try {
+    const { items, skipped } = CsvImport.read(await f.text());
+    const fresh = items.filter((it, i) => !state.items.some((x) => sameEntry(x, it)) && items.findIndex((y) => sameEntry(y, it)) === i);
+    const dupes = items.length - fresh.length;
+    csvPending = fresh;
+    $('csv-n').textContent = fresh.length
+      ? `${fresh.length} identifiant${fresh.length > 1 ? 's' : ''} à importer`
+      : 'Rien de nouveau à importer';
+    $('csv-detail').textContent = [
+      dupes ? `${dupes} déjà dans le coffre` : '',
+      skipped ? `${skipped} ligne${skipped > 1 ? 's' : ''} vide${skipped > 1 ? 's' : ''} ignorée${skipped > 1 ? 's' : ''}` : '',
+    ].filter(Boolean).join(' · ');
+    $('csv-preview').replaceChildren(...fresh.slice(0, 50).map((it) => {
+      const li = document.createElement('li');
+      const av = document.createElement('div');
+      av.className = 'avatar';
+      av.textContent = (it.title[0] || '?').toUpperCase();
+      const t = document.createElement('span');
+      t.textContent = it.title + (it.user ? ` · ${it.user}` : '');
+      const c = document.createElement('em');
+      c.textContent = catOf(it.cat).label;
+      li.append(av, t, c);
+      return li;
+    }));
+    $('csv-intro').hidden = true;
+    $('csv-result').hidden = false;
+    $('csv-go').hidden = !fresh.length;
+    $('csv-pick').textContent = 'Autre fichier';
+  } catch (ex) {
+    $('csv-error').textContent = ex && ex.message === 'colonnes'
+      ? 'Fichier non reconnu : aucune colonne « password » trouvée. Vérifiez que c\'est bien un export CSV de mots de passe.'
+      : 'Impossible de lire ce fichier.';
+  }
+};
+$('csv-go').onclick = async () => {
+  if (!csvPending.length || !state.session) return;
+  const now = Date.now();
+  csvPending.forEach((it, i) => {
+    state.items.push({ id: crypto.randomUUID ? crypto.randomUUID() : `${now}-${i}-${Math.random()}`, created: now, updated: now, ...it });
+  });
+  const n = csvPending.length;
+  csvPending = [];
+  await persist();
+  closeSheet('csv-sheet');
+  state.filter = 'all';
+  render();
+  toast(`${n} identifiant${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''} ✓ · supprimez le fichier CSV`);
+};
+
 function pickBackup() { $('file-in').value = ''; $('file-in').click(); }
 $('s-import').onclick = () => {
   if (confirm('Importer une sauvegarde remplacera le coffre actuel. Continuer ?')) pickBackup();

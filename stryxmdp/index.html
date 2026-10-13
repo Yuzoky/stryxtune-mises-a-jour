@@ -172,6 +172,7 @@
       </label>
       <button class="tile glass" id="s-bio" hidden><b id="s-bio-title">Empreinte digitale</b><span id="s-bio-sub"></span></button>
       <button class="tile glass" id="s-update" hidden><b>Mises à jour</b><span id="s-update-sub"></span></button>
+      <button class="tile glass" id="s-csv"><b>Importer des mots de passe (CSV)</b><span>Depuis Google / Chrome, Brave, Firefox, Bitwarden, LastPass…</span></button>
       <button class="tile glass" id="s-export"><b>Exporter une sauvegarde</b><span>Fichier chiffré avec votre mot de passe maître</span></button>
       <button class="tile glass" id="s-import"><b>Importer une sauvegarde</b><span>Remplace le coffre actuel</span></button>
       <button class="tile glass" id="s-change"><b>Changer le mot de passe maître</b><span>Rechiffre tout le coffre</span></button>
@@ -229,10 +230,40 @@
     </form>
   </div>
 
+  <!-- ===== Feuille : import CSV ===== -->
+  <div class="sheet" id="csv-sheet" hidden>
+    <div class="sheet-body glass">
+      <div class="grab"></div>
+      <h2>Importer des mots de passe</h2>
+      <div id="csv-intro">
+        <p class="muted small">Exportez vos mots de passe en fichier <b>.csv</b> depuis votre ancien gestionnaire, puis choisissez-le ici. Ils seront ajoutés à votre coffre (rien n'est supprimé).</p>
+        <ul class="csv-help small">
+          <li><b>Google / Chrome</b> : passwords.google.com › ⚙ Paramètres › Exporter</li>
+          <li><b>Brave</b> : Paramètres › Mots de passe › ⋮ › Exporter les mots de passe</li>
+          <li><b>Firefox</b> : about:logins › ⋯ › Exporter les identifiants</li>
+          <li><b>Bitwarden, LastPass, 1Password, Dashlane, Proton Pass</b> : Exporter au format CSV</li>
+        </ul>
+      </div>
+      <div id="csv-result" hidden>
+        <p class="csv-count"><b id="csv-n"></b><span id="csv-detail" class="muted"></span></p>
+        <ul class="csv-preview" id="csv-preview"></ul>
+        <p class="warn small">⚠ Après l'import, supprimez le fichier CSV du téléphone : il contient vos mots de passe en clair.</p>
+      </div>
+      <p id="csv-error" class="error" role="alert"></p>
+      <div class="row">
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="button" class="btn" id="csv-pick">Choisir un fichier</button>
+        <button type="button" class="btn primary" id="csv-go" hidden>Importer</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="csv-in" accept=".csv,text/csv,text/comma-separated-values,text/plain" hidden>
   <input type="file" id="file-in" accept=".json,application/json" hidden>
   <div id="toast" class="toast" role="status"></div>
 
   <script src="crypto.js"></script>
+  <script src="importcsv.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
