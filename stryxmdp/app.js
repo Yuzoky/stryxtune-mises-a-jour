@@ -35,7 +35,7 @@ const storage = {
 const settings = Object.assign({ autolock: 300 }, storage.get(SETTINGS_KEY));
 
 async function persist() {
-  const blob = await VaultCrypto.encrypt(state.session, { items: state.items });
+  const blob = await VaultCrypto.encrypt(state.session, { items: state.items, planning: state.planning });
   storage.set(STORE_KEY, blob);
 }
 
@@ -169,6 +169,7 @@ function lockMode() {
 function lock() {
   state.session = null;
   state.items = [];
+  state.planning = null;
   state.current = null;
   clearTimeout(state.lockTimer);
   closeAllSheets();
@@ -207,6 +208,7 @@ async function onUnlock(e, bioPassword) {
       const res = await VaultCrypto.open(pw, blob);
       state.session = res.session;
       state.items = Array.isArray(res.data.items) ? res.data.items : [];
+      state.planning = res.data.planning || null;
       if (state.pendingImport) {
         storage.set(STORE_KEY, state.pendingImport);
         state.pendingImport = null;
@@ -365,11 +367,45 @@ function showTab(name) {
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $('tab-pw').hidden = name !== 'pw';
   $('tab-plan').hidden = name !== 'plan';
-  if (name === 'plan') Planning.show();
+  if (name === 'plan') Planning.show(state.planning);
   settings.tab = name;
   storage.set(SETTINGS_KEY, settings);
 }
 document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
+
+/* ---------- Import d'un planning (code fourni par Claude) ---------- */
+
+$('plan-import').onclick = () => {
+  $('plan-code').value = '';
+  $('plan-error').textContent = '';
+  $('plan-clear').hidden = !state.planning;
+  openSheet('plan-sheet');
+};
+$('plan-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  let add;
+  try {
+    add = Planning.decode($('plan-code').value);
+  } catch {
+    $('plan-error').textContent = 'Code non reconnu : copiez bien tout le code envoyé par Claude (il commence par STRYXPLAN:).';
+    return;
+  }
+  state.planning = Planning.merge(state.planning, add);
+  await persist();
+  $('plan-code').value = '';
+  closeSheet('plan-sheet');
+  Planning.show(state.planning);
+  const nDays = new Set(add.entries.map((x) => x.date)).size;
+  toast(`Planning ajouté ✓ (${nDays} jour${nDays > 1 ? 's' : ''})`);
+});
+$('plan-clear').onclick = async () => {
+  if (!confirm('Effacer tout le planning ?')) return;
+  state.planning = null;
+  await persist();
+  closeSheet('plan-sheet');
+  Planning.show(null);
+  toast('Planning effacé');
+};
 
 /* ---------- Ajout / modification ---------- */
 

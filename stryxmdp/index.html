@@ -103,8 +103,9 @@
       <ul class="days" id="days"></ul>
       <div class="empty" id="plan-empty" hidden>
         <p>Aucun planning pour l'instant.</p>
-        <p class="muted">Envoie une photo de ton planning à Claude : il l'ajoutera ici à la prochaine mise à jour.</p>
+        <p class="muted">Envoie une photo de ton planning à Claude : il te donnera un <b>code planning</b> à coller ici.</p>
       </div>
+      <button class="btn plan-import" id="plan-import" type="button">📋 Coller un code planning</button>
       <p class="muted small plan-foot" id="plan-foot"></p>
     </div>
   </section>
@@ -280,6 +281,22 @@
         <button type="button" class="btn primary" id="csv-go" hidden>Importer</button>
       </div>
     </div>
+  </div>
+
+  <!-- ===== Feuille : coller un code planning ===== -->
+  <div class="sheet" id="plan-sheet" hidden>
+    <form class="sheet-body glass" id="plan-form" autocomplete="off">
+      <div class="grab"></div>
+      <h2>Ajouter un planning</h2>
+      <p class="muted small">Collez le code planning envoyé par Claude. Il est enregistré uniquement sur ce téléphone, chiffré dans votre coffre.</p>
+      <textarea id="plan-code" rows="5" class="mono" placeholder="STRYXPLAN:…" spellcheck="false" autocapitalize="off"></textarea>
+      <p id="plan-error" class="error" role="alert"></p>
+      <div class="row">
+        <button type="button" class="btn danger" id="plan-clear" hidden>Effacer</button>
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="submit" class="btn primary">Ajouter</button>
+      </div>
+    </form>
   </div>
 
   <input type="file" id="csv-in" accept=".csv,text/csv,text/comma-separated-values,text/plain" hidden>

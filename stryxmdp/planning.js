@@ -1,4 +1,5 @@
-// Page Planning : affiche planning.json semaine par semaine.
+// Page Planning : affiche le planning stocké dans le coffre chiffré, semaine par semaine.
+// Il est importé avec un « code planning » (STRYXPLAN:…) fourni par Claude ; rien n'est public.
 // Format : { "updated": "AAAA-MM-JJ", "weeks": [{ "start": "AAAA-MM-JJ" (lundi), "contract": "HH:MM" }], "entries": [
 //   { "date": "AAAA-MM-JJ", "start": "HH:MM", "end": "HH:MM", "label": "…", "place": "…", "note": "…" },
 //   { "date": "AAAA-MM-JJ", "off": true, "label": "Repos" } ] }
@@ -34,16 +35,31 @@ const Planning = (() => {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(m / 60), m % 60);
   }
 
-  async function load() {
-    if (data) return data;
-    try {
-      const res = await fetch('planning.json', { cache: 'no-store' });
-      data = await res.json();
-    } catch {
-      data = { entries: [] };
+  const validEntries = (list) => (Array.isArray(list) ? list : []).filter((e) => e && /^\d{4}-\d{2}-\d{2}$/.test(e.date || ''));
+
+  // Lit un code planning (STRYXPLAN:<base64 du JSON>) ou du JSON brut.
+  function decode(code) {
+    let text = code.trim();
+    if (/^STRYXPLAN:/i.test(text)) {
+      const b64 = text.slice(10).replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      text = new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
     }
-    data.entries = (data.entries || []).filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date || ''));
-    return data;
+    const obj = JSON.parse(text);
+    const entries = validEntries(obj.entries);
+    if (!entries.length) throw new Error('vide');
+    return { updated: obj.updated || '', weeks: Array.isArray(obj.weeks) ? obj.weeks : [], entries };
+  }
+
+  // Fusionne : les jours présents dans le nouveau planning remplacent les anciens.
+  function merge(old, add) {
+    const days = new Set(add.entries.map((e) => e.date));
+    const weeks = new Map(((old && old.weeks) || []).map((w) => [w.start, w]));
+    add.weeks.forEach((w) => weeks.set(w.start, w));
+    return {
+      updated: add.updated || (old && old.updated) || '',
+      weeks: [...weeks.values()],
+      entries: [...validEntries(old && old.entries).filter((e) => !days.has(e.date)), ...add.entries],
+    };
   }
 
   function el(tag, cls, text) {
@@ -128,8 +144,11 @@ const Planning = (() => {
     $('week-today').hidden = iso(weekStart) === iso(mondayOf(new Date()));
   }
 
-  async function show() {
-    await load();
+  function show(planning) {
+    const fresh = planning || { entries: [] };
+    if (data !== fresh) weekStart = null;
+    data = fresh;
+    data.entries = validEntries(data.entries);
     const empty = !data.entries.length;
     $('plan-empty').hidden = !empty;
     $('days').hidden = empty;
@@ -144,12 +163,12 @@ const Planning = (() => {
     renderNext();
     renderWeek();
     $('plan-foot').textContent = (data.updated ? `Planning mis à jour le ${parseDate(data.updated).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}. ` : '')
-      + 'Nouvelle photo ? Envoie-la à Claude.';
+      + 'Nouveau planning ? Envoie la photo à Claude.';
   }
 
   $('week-prev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
   $('week-next').onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
   $('week-today').onclick = () => { weekStart = mondayOf(new Date()); renderWeek(); };
 
-  return { show };
+  return { show, decode, merge };
 })();
