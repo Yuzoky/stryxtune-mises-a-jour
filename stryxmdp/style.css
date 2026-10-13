@@ -175,6 +175,8 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: #fff; margin: 0;
   text-shadow: 0 0 6px #000, 0 0 2px #000;
 }
 
+.avatar.has-icon { background: #fff; box-shadow: 0 0 0 1px var(--stroke), 0 0 14px rgba(255, 255, 255, 0.12); }
+.avatar img { width: 58%; height: 58%; object-fit: contain; border-radius: 4px; }
 .empty { text-align: center; padding: 60px 20px; }
 .empty p { margin: 4px 0; }
 

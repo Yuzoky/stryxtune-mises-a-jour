@@ -70,6 +70,70 @@ function setStrength(el, pw) {
   el.title = ['', 'Faible', 'Moyen', 'Bon', 'Excellent'][score];
 }
 
+/* ---------- Logos des sites ---------- */
+
+// Noms courants sans adresse web → domaine du site.
+const KNOWN_SITES = {
+  steam: 'steampowered.com', discord: 'discord.com', instagram: 'instagram.com', insta: 'instagram.com',
+  facebook: 'facebook.com', messenger: 'messenger.com', whatsapp: 'whatsapp.com', snapchat: 'snapchat.com', snap: 'snapchat.com',
+  tiktok: 'tiktok.com', twitter: 'x.com', x: 'x.com', youtube: 'youtube.com', twitch: 'twitch.tv', reddit: 'reddit.com',
+  telegram: 'telegram.org', linkedin: 'linkedin.com', pinterest: 'pinterest.com', bereal: 'bereal.com',
+  google: 'google.com', gmail: 'gmail.com', outlook: 'outlook.com', hotmail: 'outlook.com', yahoo: 'yahoo.com',
+  icloud: 'icloud.com', apple: 'apple.com', microsoft: 'microsoft.com', proton: 'proton.me', protonmail: 'proton.me',
+  netflix: 'netflix.com', spotify: 'spotify.com', deezer: 'deezer.com', disney: 'disneyplus.com', primevideo: 'primevideo.com',
+  amazon: 'amazon.fr', paypal: 'paypal.com', revolut: 'revolut.com', lydia: 'lydia-app.com', boursorama: 'boursorama.com',
+  epicgames: 'epicgames.com', epic: 'epicgames.com', fortnite: 'fortnite.com', riot: 'riotgames.com', riotgames: 'riotgames.com',
+  valorant: 'playvalorant.com', leagueoflegends: 'leagueoflegends.com', lol: 'leagueoflegends.com',
+  playstation: 'playstation.com', psn: 'playstation.com', xbox: 'xbox.com', nintendo: 'nintendo.com', ubisoft: 'ubisoft.com',
+  ea: 'ea.com', battlenet: 'battle.net', blizzard: 'blizzard.com', roblox: 'roblox.com', minecraft: 'minecraft.net',
+  rockstar: 'rockstargames.com', faceit: 'faceit.com', uber: 'uber.com', ubereats: 'ubereats.com', deliveroo: 'deliveroo.fr',
+  vinted: 'vinted.fr', leboncoin: 'leboncoin.fr', shein: 'shein.com', temu: 'temu.com', zalando: 'zalando.fr',
+  burgerking: 'burgerking.fr', mcdonalds: 'mcdonalds.fr', sncf: 'sncf-connect.com', ameli: 'ameli.fr', caf: 'caf.fr',
+  impots: 'impots.gouv.fr', franceconnect: 'franceconnect.gouv.fr', orange: 'orange.fr', sfr: 'sfr.fr', free: 'free.fr',
+  bouygues: 'bouyguestelecom.fr', github: 'github.com', chatgpt: 'chatgpt.com', claude: 'claude.ai', canva: 'canva.com',
+};
+
+function siteDomain(it) {
+  if (it.url) {
+    try {
+      const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(it.url) ? it.url : 'https://' + it.url);
+      if (u.hostname.includes('.')) return u.hostname.replace(/^www\./, '');
+    } catch { /* adresse invalide : on essaie le nom */ }
+  }
+  const title = (it.title || '').trim().toLowerCase();
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(title)) return title.replace(/^www\./, '');
+  const key = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  return KNOWN_SITES[key] || KNOWN_SITES[key.split(/\d/)[0]] || '';
+}
+
+// Remplit une pastille ronde : logo du site si disponible, sinon l'initiale.
+function fillAvatar(av, it) {
+  av.replaceChildren();
+  av.classList.remove('has-icon');
+  av.textContent = (it.title[0] || '?').toUpperCase();
+  const domain = settings.icons !== false ? siteDomain(it) : '';
+  if (!domain) return;
+  if (iconFailed.has(domain)) return;
+  const img = new Image();
+  img.alt = '';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  const show = () => {
+    av.textContent = '';
+    av.append(img);
+    av.classList.add('has-icon');
+  };
+  img.onload = () => {
+    if (img.naturalWidth < 8) { iconFailed.add(domain); return; } // icône vide
+    show();
+  };
+  img.onerror = () => iconFailed.add(domain);
+  img.src = `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`;
+  if (img.complete && img.naturalWidth >= 8) show(); // déjà en cache : pas de clignotement
+}
+// Sites sans logo (pour ne pas les redemander pendant la session).
+const iconFailed = new Set();
+
 const catOf = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
 function safeUrl(u) {
@@ -301,7 +365,7 @@ function render() {
     li.style.animationDelay = Math.min(i * 30, 300) + 'ms';
     const av = document.createElement('div');
     av.className = 'avatar';
-    av.textContent = (it.title[0] || '?').toUpperCase();
+    fillAvatar(av, it);
     const txt = document.createElement('div');
     txt.className = 'item-txt';
     const t = document.createElement('b');
@@ -326,7 +390,7 @@ function openView(id) {
   const it = state.items.find((x) => x.id === id);
   if (!it) return;
   state.current = id;
-  $('v-avatar').textContent = (it.title[0] || '?').toUpperCase();
+  fillAvatar($('v-avatar'), it);
   $('v-title').textContent = it.title;
   $('v-cat').textContent = `${catOf(it.cat).icon} ${catOf(it.cat).label}`;
   $('v-user').textContent = it.user || '—';
@@ -522,6 +586,7 @@ $('settings-btn').onclick = () => {
   bio.refreshSettings();
   updates.refreshSettings();
   refreshScreenSetting();
+  refreshIconsSetting();
   openSheet('settings-sheet');
 };
 $('s-autolock').onchange = () => {
@@ -591,7 +656,7 @@ $('csv-in').onchange = async () => {
       const li = document.createElement('li');
       const av = document.createElement('div');
       av.className = 'avatar';
-      av.textContent = (it.title[0] || '?').toUpperCase();
+      fillAvatar(av, it);
       const t = document.createElement('span');
       t.textContent = it.title + (it.user ? ` · ${it.user}` : '');
       const c = document.createElement('em');
@@ -815,6 +880,22 @@ window.stryxBio = (action, ok, payload) => {
       $('bio-error').textContent = payload;
     }
   }
+};
+
+/* ---------- Réglage : logos des sites ---------- */
+
+function refreshIconsSetting() {
+  const on = settings.icons !== false;
+  $('s-icons-title').textContent = on ? 'Logos des sites : affichés' : 'Logos des sites : masqués';
+  $('s-icons-sub').textContent = on
+    ? 'Le nom du site (ex. discord.com) est demandé à DuckDuckGo pour son logo. Touchez pour masquer.'
+    : 'Aucune connexion pour les logos : seules les initiales sont affichées. Touchez pour afficher.';
+}
+$('s-icons').onclick = () => {
+  settings.icons = settings.icons === false;
+  storage.set(SETTINGS_KEY, settings);
+  refreshIconsSetting();
+  render();
 };
 
 /* ---------- Protection d'écran (captures / partage d'écran) ---------- */

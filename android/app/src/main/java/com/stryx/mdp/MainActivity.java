@@ -41,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 public class MainActivity extends Activity {
 
     private static final String HOST = "appassets.androidplatform.net";
+    private static final String ICON_HOST = "icons.duckduckgo.com";
     private static final String START_URL = "https://" + HOST + "/index.html";
     private static final int REQ_OPEN_FILE = 1;
     private static final int REQ_SAVE_FILE = 2;
@@ -72,7 +73,8 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(false);
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setSupportZoom(false);
-        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // Cache HTTP par défaut : seuls les logos des sites viennent du réseau (les fichiers de l'appli sont locaux).
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
 
         biometrics = new Biometrics(this, (action, ok, payload) -> web.evaluateJavascript(
                 "window.stryxBio && window.stryxBio(" + JSONObject.quote(action) + "," + ok + ","
@@ -161,6 +163,8 @@ public class MainActivity extends Activity {
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             Uri url = request.getUrl();
+            // Seule exception au « tout local » : les logos des sites (service d'icônes de DuckDuckGo).
+            if (ICON_HOST.equals(url.getHost()) && "https".equals(url.getScheme())) return null;
             if (!HOST.equals(url.getHost())) return blocked();
             String path = url.getPath();
             if (path == null || path.equals("/") || path.isEmpty()) path = "/index.html";
