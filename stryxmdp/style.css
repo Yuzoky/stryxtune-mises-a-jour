@@ -106,6 +106,17 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: #fff; margin: 0;
 @keyframes rot { to { transform: rotate(360deg); } }
 .btn.install { flex: none; width: 100%; margin-top: 16px; box-shadow: 0 0 18px rgba(255, 255, 255, 0.08); }
 .steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+.btn.bio { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.btn.bio .fp { width: 22px; height: 22px; filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6)); }
+.bio-ico .fp { width: 42px; height: 42px; filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.7)); }
+.bio-ico {
+  width: 74px; height: 74px; margin: 6px auto 0; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--stroke-hi);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 70%);
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.15); text-shadow: 0 0 14px #fff;
+}
+#bio-sheet h2 { text-align: center; }
+#bio-sheet p.muted { margin: 0; font-size: 14px; text-align: center; }
 .link { margin-top: 18px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
 .icon-btn {

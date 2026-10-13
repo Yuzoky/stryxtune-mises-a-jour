@@ -26,6 +26,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -45,6 +47,7 @@ public class MainActivity extends Activity {
     private static final long CLIPBOARD_CLEAR_MS = 30_000;
 
     private WebView web;
+    private Biometrics biometrics;
     private ValueCallback<Uri[]> fileCallback;
     private String pendingSave;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -69,6 +72,9 @@ public class MainActivity extends Activity {
         s.setSupportZoom(false);
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
 
+        biometrics = new Biometrics(this, (action, ok, payload) -> web.evaluateJavascript(
+                "window.stryxBio && window.stryxBio(" + JSONObject.quote(action) + "," + ok + ","
+                        + JSONObject.quote(payload) + ")", null));
         web.addJavascriptInterface(new Bridge(), "StryxAndroid");
         web.setWebViewClient(new LocalClient());
         web.setWebChromeClient(new WebChromeClient() {
@@ -207,6 +213,31 @@ public class MainActivity extends Activity {
                     }
                 }, CLIPBOARD_CLEAR_MS);
             });
+        }
+
+        @JavascriptInterface
+        public String biometricStatus() {
+            return biometrics.status();
+        }
+
+        @JavascriptInterface
+        public boolean biometricEnabled() {
+            return biometrics.isEnabled();
+        }
+
+        @JavascriptInterface
+        public void biometricEnable(String masterPassword) {
+            handler.post(() -> biometrics.enable(masterPassword));
+        }
+
+        @JavascriptInterface
+        public void biometricUnlock() {
+            handler.post(biometrics::unlock);
+        }
+
+        @JavascriptInterface
+        public void biometricDisable() {
+            biometrics.disable();
         }
 
         @JavascriptInterface

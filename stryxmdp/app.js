@@ -162,6 +162,7 @@ function lockMode() {
       : '';
   $('master').autocomplete = creating ? 'new-password' : 'current-password';
   $('restore-btn').textContent = state.pendingImport ? 'Annuler la restauration' : 'Restaurer une sauvegarde';
+  $('bio-btn').hidden = !(exists && !state.pendingImport && bio.enabled());
   return creating;
 }
 
@@ -180,9 +181,10 @@ function lock() {
   lockMode();
 }
 
-async function onUnlock(e) {
-  e.preventDefault();
-  const pw = $('master').value;
+async function onUnlock(e, bioPassword) {
+  if (e) e.preventDefault();
+  const viaBio = typeof bioPassword === 'string';
+  const pw = viaBio ? bioPassword : $('master').value;
   const err = $('lock-error');
   const btn = $('lock-btn');
   err.textContent = '';
@@ -208,9 +210,11 @@ async function onUnlock(e) {
       if (state.pendingImport) {
         storage.set(STORE_KEY, state.pendingImport);
         state.pendingImport = null;
+        bio.disable(); // la sauvegarde peut avoir un autre mot de passe maître
         toast('Sauvegarde restaurée');
       }
     }
+    if (!viaBio) bio.offer(pw);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     $('master').value = '';
     $('master2').value = '';
@@ -219,6 +223,13 @@ async function onUnlock(e) {
     render();
     armAutolock();
   } catch (ex) {
+    if (viaBio) {
+      // Le mot de passe maître a changé depuis l'activation : on repart du mot de passe.
+      bio.disable();
+      lockMode();
+      err.textContent = 'Empreinte désactivée : entrez votre mot de passe maître.';
+      return;
+    }
     err.textContent = ex && ex.message === 'format' ? 'Fichier de sauvegarde invalide.' : 'Mot de passe incorrect.';
     $('lock-form').classList.remove('shake');
     void $('lock-form').offsetWidth;
@@ -244,7 +255,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { state.hiddenAt = Date.now(); return; }
   // En revenant dans l'appli : verrouille si on est resté absent trop longtemps (30 s max).
   const limit = settings.autolock ? Math.min(settings.autolock, 30) * 1000 : 0;
-  if (state.session && limit && Date.now() - state.hiddenAt >= limit) lock();
+  if (state.session && limit && Date.now() - state.hiddenAt >= limit) {
+    lock();
+    bio.prompt();
+  }
 });
 
 /* ---------- Liste ---------- */
@@ -443,7 +457,11 @@ $('gen-use').onclick = () => {
 
 /* ---------- Paramètres ---------- */
 
-$('settings-btn').onclick = () => { $('s-autolock').value = String(settings.autolock); openSheet('settings-sheet'); };
+$('settings-btn').onclick = () => {
+  $('s-autolock').value = String(settings.autolock);
+  bio.refreshSettings();
+  openSheet('settings-sheet');
+};
 $('s-autolock').onchange = () => {
   settings.autolock = +$('s-autolock').value;
   storage.set(SETTINGS_KEY, settings);
@@ -513,13 +531,19 @@ $('pw-form').addEventListener('submit', async (e) => {
   state.session = await VaultCrypto.newKey($('pw-new').value);
   await persist();
   closeSheet('pw-sheet');
-  toast('Mot de passe maître changé');
+  if (bio.enabled()) {
+    bio.disable();
+    toast('Mot de passe changé · réactivez l\'empreinte dans les paramètres');
+  } else {
+    toast('Mot de passe maître changé');
+  }
 });
 
 $('s-wipe').onclick = () => {
   if (!confirm('Effacer définitivement tous les mots de passe de cet appareil ?')) return;
   if (!confirm('Dernière confirmation : cette action est irréversible.')) return;
   storage.remove(STORE_KEY);
+  bio.disable();
   lock();
   toast('Coffre effacé');
 };
@@ -564,6 +588,98 @@ if (!native && 'serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+/* ---------- Empreinte digitale (application Android uniquement) ---------- */
+
+// Le mot de passe maître est chiffré par une clé du Keystore Android qui ne s'ouvre
+// qu'après une empreinte valide. Il ne quitte jamais le téléphone.
+const bio = {
+  available: () => !!(native && native.biometricStatus && native.biometricStatus() === 'available'),
+  enabled: () => !!(native && native.biometricEnabled && native.biometricEnabled()),
+  pendingPw: null,
+
+  prompt() {
+    if (!bio.enabled() || state.session || state.pendingImport || !storage.get(STORE_KEY)) return;
+    native.biometricUnlock();
+  },
+  disable() {
+    if (native && native.biometricDisable) native.biometricDisable();
+    $('bio-btn').hidden = true;
+  },
+  // Après un déverrouillage par mot de passe : propose l'empreinte une seule fois.
+  offer(pw) {
+    if (!bio.available() || bio.enabled() || settings.bioAsked) return;
+    settings.bioAsked = true;
+    storage.set(SETTINGS_KEY, settings);
+    bio.openSheet(pw);
+  },
+  openSheet(pw) {
+    bio.pendingPw = pw || null;
+    $('bio-pw').value = '';
+    $('bio-pw-field').hidden = !!pw;
+    $('bio-error').textContent = '';
+    openSheet('bio-sheet');
+  },
+  refreshSettings() {
+    const tile = $('s-bio');
+    tile.hidden = !bio.available() && !bio.enabled();
+    const on = bio.enabled();
+    $('s-bio-title').textContent = on ? 'Empreinte digitale : activée' : 'Activer l\'empreinte digitale';
+    $('s-bio-sub').textContent = on ? 'Touchez pour la désactiver' : 'Déverrouillez le coffre avec votre doigt';
+  },
+};
+
+$('bio-btn').onclick = () => bio.prompt();
+$('s-bio').onclick = () => {
+  if (bio.enabled()) {
+    if (!confirm('Désactiver le déverrouillage par empreinte ?')) return;
+    bio.disable();
+    bio.refreshSettings();
+    toast('Empreinte désactivée');
+  } else {
+    closeSheet('settings-sheet');
+    bio.openSheet(null);
+  }
+};
+$('bio-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pw = bio.pendingPw || $('bio-pw').value;
+  if (!bio.pendingPw) {
+    try {
+      await VaultCrypto.open(pw, storage.get(STORE_KEY));
+    } catch {
+      $('bio-error').textContent = 'Mot de passe incorrect.';
+      return;
+    }
+  }
+  bio.pendingPw = null;
+  $('bio-pw').value = '';
+  native.biometricEnable(pw);
+});
+$('bio-sheet').addEventListener('click', (e) => {
+  if (e.target === $('bio-sheet') || e.target.hasAttribute('data-close')) bio.pendingPw = null;
+});
+
+// Réponses du code Android : action = 'enable' | 'unlock', ok = vrai/faux.
+window.stryxBio = (action, ok, payload) => {
+  if (action === 'unlock') {
+    if (ok) onUnlock(null, payload);
+    else if (payload === 'invalidated') {
+      lockMode();
+      $('lock-error').textContent = 'Vos empreintes ont changé : entrez votre mot de passe maître, puis réactivez l\'empreinte.';
+    } else if (payload !== 'cancel') toast(payload);
+    return;
+  }
+  if (action === 'enable') {
+    if (ok) {
+      closeSheet('bio-sheet');
+      lockMode();
+      toast('Empreinte activée ✓');
+    } else if (payload !== 'cancel') {
+      $('bio-error').textContent = payload;
+    }
+  }
+};
+
 /* ---------- Installation (icône sur l'écran d'accueil) ---------- */
 
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -597,3 +713,4 @@ $('install-btn').onclick = async () => {
 
 starfield();
 lockMode();
+bio.prompt();
