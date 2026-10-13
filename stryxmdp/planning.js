@@ -321,7 +321,17 @@ const Planning = (() => {
     $('plan-me').hidden = m !== 'me';
     $('plan-team').hidden = m !== 'team';
     if (m === 'team') renderTeam();
+    updateRemoveBtn();
   }
+
+  function updateRemoveBtn() {
+    const wk = currentWeek();
+    const btn = $('plan-remove');
+    const has = wk && (((data.teams || {})[wk]) || validEntries(data.entries).some((e) => mondayOfIso(e.date) === wk));
+    btn.hidden = !has;
+    if (has) btn.textContent = `🗑 Supprimer la semaine ${weekLabel(wk)}`;
+  }
+  const mondayOfIso = (d) => iso(mondayOf(parseDate(d)));
 
   function show(planning) {
     const fresh = planning || { entries: [] };
@@ -332,7 +342,7 @@ const Planning = (() => {
     $('plan-empty').hidden = !empty;
     $('plan-me').hidden = empty;
     $('plan-mode').hidden = empty || !teamKeys().length;
-    if (empty) { $('plan-team').hidden = true; $('plan-foot').textContent = ''; return; }
+    if (empty) { $('plan-team').hidden = true; $('plan-remove').hidden = true; $('plan-foot').textContent = ''; return; }
     if (teamKeys().length && !teamWeek) {
       const current = iso(mondayOf(new Date()));
       teamWeek = teamKeys().includes(current) ? current : teamKeys()[teamKeys().length - 1];
@@ -352,12 +362,12 @@ const Planning = (() => {
       + 'Nouveau planning ? Envoie la photo à Claude.';
   }
 
-  $('week-prev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
-  $('week-next').onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
-  $('week-today').onclick = () => { weekStart = mondayOf(new Date()); renderWeek(); };
+  $('week-prev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); updateRemoveBtn(); };
+  $('week-next').onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); updateRemoveBtn(); };
+  $('week-today').onclick = () => { weekStart = mondayOf(new Date()); renderWeek(); updateRemoveBtn(); };
   document.querySelectorAll('#plan-mode button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
-  $('team-prev').onclick = () => { const k = teamKeys(); teamWeek = k[Math.max(0, k.indexOf(teamWeek) - 1)]; renderTeam(); };
-  $('team-next').onclick = () => { const k = teamKeys(); teamWeek = k[Math.min(k.length - 1, k.indexOf(teamWeek) + 1)]; renderTeam(); };
+  $('team-prev').onclick = () => { const k = teamKeys(); teamWeek = k[Math.max(0, k.indexOf(teamWeek) - 1)]; renderTeam(); updateRemoveBtn(); };
+  $('team-next').onclick = () => { const k = teamKeys(); teamWeek = k[Math.min(k.length - 1, k.indexOf(teamWeek) + 1)]; renderTeam(); updateRemoveBtn(); };
 
   // Glisser à gauche / à droite sur la frise pour changer de jour.
   let touchX = null;
@@ -371,5 +381,33 @@ const Planning = (() => {
     renderTeam();
   }, { passive: true });
 
-  return { show, decode, merge };
+  // Lundi (AAAA-MM-JJ) de la semaine actuellement affichée, selon la vue.
+  function currentWeek() {
+    if (mode === 'team' && teamWeek) return teamWeek;
+    return weekStart ? iso(weekStart) : null;
+  }
+
+  // Retire une semaine (créneaux perso + équipe) ; renvoie null s'il ne reste rien.
+  function removeWeek(planning, monday) {
+    if (!planning || !monday) return planning;
+    const start = parseDate(monday);
+    const days = new Set([0, 1, 2, 3, 4, 5, 6].map((i) => iso(addDays(start, i))));
+    const teams = { ...(planning.teams || {}) };
+    delete teams[monday];
+    const out = {
+      updated: planning.updated,
+      weeks: (planning.weeks || []).filter((w) => w.start !== monday),
+      entries: validEntries(planning.entries).filter((e) => !days.has(e.date)),
+      teams,
+    };
+    return out.entries.length || Object.keys(teams).length ? out : null;
+  }
+
+  function weekLabel(monday) {
+    const start = parseDate(monday);
+    const end = addDays(start, 6);
+    return `du ${start.getDate()} au ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
+  }
+
+  return { show, decode, merge, currentWeek, removeWeek, weekLabel };
 })();

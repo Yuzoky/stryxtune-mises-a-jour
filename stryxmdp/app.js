@@ -398,8 +398,16 @@ $('plan-form').addEventListener('submit', async (e) => {
   const nDays = new Set(add.entries.map((x) => x.date)).size;
   toast(`Planning ajouté ✓ (${nDays} jour${nDays > 1 ? 's' : ''})`);
 });
+$('plan-remove').onclick = async () => {
+  const wk = Planning.currentWeek();
+  if (!wk || !confirm(`Supprimer le planning ${Planning.weekLabel(wk)} ?`)) return;
+  state.planning = Planning.removeWeek(state.planning, wk);
+  await persist();
+  Planning.show(state.planning);
+  toast('Semaine supprimée');
+};
 $('plan-clear').onclick = async () => {
-  if (!confirm('Effacer tout le planning ?')) return;
+  if (!confirm('Effacer TOUT le planning (toutes les semaines) ?')) return;
   state.planning = null;
   await persist();
   closeSheet('plan-sheet');

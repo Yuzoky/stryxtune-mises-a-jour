@@ -125,6 +125,7 @@
         <p class="muted">Envoie une photo de ton planning à Claude : il te donnera un <b>code planning</b> à coller ici.</p>
       </div>
       <button class="btn plan-import" id="plan-import" type="button">📋 Coller un code planning</button>
+      <button class="btn danger plan-remove" id="plan-remove" type="button" hidden></button>
       <p class="muted small plan-foot" id="plan-foot"></p>
     </div>
   </section>
@@ -311,7 +312,7 @@
       <textarea id="plan-code" rows="5" class="mono" placeholder="STRYXPLAN:…" spellcheck="false" autocapitalize="off"></textarea>
       <p id="plan-error" class="error" role="alert"></p>
       <div class="row">
-        <button type="button" class="btn danger" id="plan-clear" hidden>Effacer</button>
+        <button type="button" class="btn danger" id="plan-clear" hidden>Tout effacer</button>
         <button type="button" class="btn" data-close>Annuler</button>
         <button type="submit" class="btn primary">Ajouter</button>
       </div>
