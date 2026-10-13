@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private Biometrics biometrics;
+    private Updater updater;
     private ValueCallback<Uri[]> fileCallback;
     private String pendingSave;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -74,6 +75,9 @@ public class MainActivity extends Activity {
 
         biometrics = new Biometrics(this, (action, ok, payload) -> web.evaluateJavascript(
                 "window.stryxBio && window.stryxBio(" + JSONObject.quote(action) + "," + ok + ","
+                        + JSONObject.quote(payload) + ")", null));
+        updater = new Updater(this, (event, payload) -> web.evaluateJavascript(
+                "window.stryxUpdate && window.stryxUpdate(" + JSONObject.quote(event) + ","
                         + JSONObject.quote(payload) + ")", null));
         web.addJavascriptInterface(new Bridge(), "StryxAndroid");
         web.setWebViewClient(new LocalClient());
@@ -111,6 +115,12 @@ public class MainActivity extends Activity {
         web.evaluateJavascript("window.stryxBack ? window.stryxBack() : false", value -> {
             if (!"true".equals(value)) finish();
         });
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (Updater.ACTION_INSTALL_STATUS.equals(intent.getAction())) updater.onInstallStatus(intent);
     }
 
     @Override
@@ -213,6 +223,21 @@ public class MainActivity extends Activity {
                     }
                 }, CLIPBOARD_CLEAR_MS);
             });
+        }
+
+        @JavascriptInterface
+        public String appVersion() {
+            return updater.currentVersion();
+        }
+
+        @JavascriptInterface
+        public void checkUpdate(boolean manual) {
+            updater.check(manual);
+        }
+
+        @JavascriptInterface
+        public void installUpdate() {
+            handler.post(updater::install);
         }
 
         @JavascriptInterface

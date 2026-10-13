@@ -18,6 +18,17 @@
 <body>
   <canvas id="stars" aria-hidden="true"></canvas>
 
+  <!-- ===== Bandeau de mise à jour (application Android) ===== -->
+  <div id="update-bar" class="update-bar glass" role="status" hidden>
+    <div class="update-txt">
+      <b id="update-title">Mise à jour disponible</b>
+      <span id="update-sub"></span>
+    </div>
+    <button class="btn primary" id="update-go" type="button">Mettre à jour</button>
+    <button class="icon-btn" id="update-close" type="button" aria-label="Plus tard">✕</button>
+    <div class="update-progress"><i id="update-progress"></i></div>
+  </div>
+
   <!-- ===== Écran verrouillé / création ===== -->
   <section id="lock" class="screen">
     <div class="lock-inner">
@@ -160,6 +171,7 @@
         </select>
       </label>
       <button class="tile glass" id="s-bio" hidden><b id="s-bio-title">Empreinte digitale</b><span id="s-bio-sub"></span></button>
+      <button class="tile glass" id="s-update" hidden><b>Mises à jour</b><span id="s-update-sub"></span></button>
       <button class="tile glass" id="s-export"><b>Exporter une sauvegarde</b><span>Fichier chiffré avec votre mot de passe maître</span></button>
       <button class="tile glass" id="s-import"><b>Importer une sauvegarde</b><span>Remplace le coffre actuel</span></button>
       <button class="tile glass" id="s-change"><b>Changer le mot de passe maître</b><span>Rechiffre tout le coffre</span></button>

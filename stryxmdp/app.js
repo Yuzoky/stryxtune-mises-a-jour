@@ -460,6 +460,7 @@ $('gen-use').onclick = () => {
 $('settings-btn').onclick = () => {
   $('s-autolock').value = String(settings.autolock);
   bio.refreshSettings();
+  updates.refreshSettings();
   openSheet('settings-sheet');
 };
 $('s-autolock').onchange = () => {
@@ -680,6 +681,72 @@ window.stryxBio = (action, ok, payload) => {
   }
 };
 
+/* ---------- Mises à jour depuis l'application (Android) ---------- */
+
+const updates = {
+  manual: false,
+  supported: () => !!(native && native.checkUpdate),
+  check(manual) {
+    if (!updates.supported()) return;
+    updates.manual = manual;
+    if (manual) $('s-update-sub').textContent = 'Recherche…';
+    native.checkUpdate(manual);
+  },
+  reset() {
+    $('update-go').disabled = false;
+    $('update-go').textContent = 'Mettre à jour';
+    $('update-progress').style.width = '0';
+  },
+  refreshSettings() {
+    $('s-update').hidden = !updates.supported();
+    if (updates.supported()) $('s-update-sub').textContent = `Version ${native.appVersion()} · toucher pour vérifier`;
+  },
+};
+
+$('s-update').onclick = () => updates.check(true);
+$('update-close').onclick = () => { $('update-bar').hidden = true; };
+$('update-go').onclick = () => {
+  $('update-go').disabled = true;
+  $('update-go').textContent = 'Téléchargement…';
+  native.installUpdate();
+};
+
+// Réponses du code Android.
+window.stryxUpdate = (event, payload) => {
+  switch (event) {
+    case 'available':
+      $('update-title').textContent = 'Mise à jour disponible';
+      $('update-sub').textContent = `StryxMDP ${payload} · vos mots de passe sont conservés`;
+      $('update-bar').hidden = false;
+      if (updates.manual) closeSheet('settings-sheet');
+      updates.reset();
+      break;
+    case 'none':
+      if (updates.manual) {
+        $('s-update-sub').textContent = `Version ${payload} · à jour ✓`;
+        toast('StryxMDP est à jour');
+      }
+      break;
+    case 'progress':
+      $('update-go').textContent = `${payload} %`;
+      $('update-progress').style.width = payload + '%';
+      break;
+    case 'installing':
+      $('update-go').textContent = 'Installation…';
+      $('update-progress').style.width = '100%';
+      break;
+    case 'permission':
+      updates.reset();
+      $('update-sub').textContent = 'Autorisez StryxMDP à installer des applis, puis revenez et touchez « Mettre à jour ».';
+      break;
+    case 'error':
+      updates.reset();
+      if (payload !== 'cancel') toast(payload);
+      if (updates.manual) updates.refreshSettings();
+      break;
+  }
+};
+
 /* ---------- Installation (icône sur l'écran d'accueil) ---------- */
 
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -714,3 +781,4 @@ $('install-btn').onclick = async () => {
 starfield();
 lockMode();
 bio.prompt();
+updates.check(false);
