@@ -385,7 +385,7 @@ $('plan-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   let add;
   try {
-    add = Planning.decode($('plan-code').value);
+    add = await Planning.decode($('plan-code').value);
   } catch {
     $('plan-error').textContent = 'Code non reconnu : copiez bien tout le code envoyé par Claude (il commence par STRYXPLAN:).';
     return;

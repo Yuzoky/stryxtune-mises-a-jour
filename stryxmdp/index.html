@@ -93,6 +93,24 @@
 
     <!-- ===== Page Planning ===== -->
     <div id="tab-plan" hidden>
+      <nav class="plan-mode" id="plan-mode" hidden>
+        <button class="active" data-mode="me">Mon planning</button>
+        <button data-mode="team">👥 Équipe</button>
+      </nav>
+
+      <div id="plan-team" hidden>
+        <div class="week-nav">
+          <button class="icon-btn" id="team-prev" aria-label="Semaine précédente">‹</button>
+          <div class="week-label"><b id="team-title"></b><span id="team-sub"></span></div>
+          <button class="icon-btn" id="team-next" aria-label="Semaine suivante">›</button>
+        </div>
+        <div class="day-strip" id="day-strip"></div>
+        <div class="team-sum" id="team-sum"></div>
+        <div class="timeline glass" id="timeline"></div>
+        <div class="rest-list" id="rest-list"></div>
+      </div>
+
+      <div id="plan-me">
       <div class="week-nav">
         <button class="icon-btn" id="week-prev" aria-label="Semaine précédente">‹</button>
         <div class="week-label"><b id="week-title"></b><span id="week-sub"></span></div>
@@ -101,6 +119,7 @@
       <button class="chip today-chip" id="week-today" hidden>↺ Revenir à cette semaine</button>
       <div class="plan-next glass" id="plan-next" hidden></div>
       <ul class="days" id="days"></ul>
+      </div>
       <div class="empty" id="plan-empty" hidden>
         <p>Aucun planning pour l'instant.</p>
         <p class="muted">Envoie une photo de ton planning à Claude : il te donnera un <b>code planning</b> à coller ici.</p>

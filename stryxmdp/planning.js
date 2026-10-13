@@ -2,7 +2,10 @@
 // Il est importé avec un « code planning » (STRYXPLAN:…) fourni par Claude ; rien n'est public.
 // Format : { "updated": "AAAA-MM-JJ", "weeks": [{ "start": "AAAA-MM-JJ" (lundi), "contract": "HH:MM" }], "entries": [
 //   { "date": "AAAA-MM-JJ", "start": "HH:MM", "end": "HH:MM", "label": "…", "place": "…", "note": "…" },
-//   { "date": "AAAA-MM-JJ", "off": true, "label": "Repos" } ] }
+//   { "date": "AAAA-MM-JJ", "off": true, "label": "Repos" } ],
+//   "teams": { "AAAA-MM-JJ" (lundi): { "me": "Nom", "totals": [7 × "HH:MM"],
+//              "people": [[ "Nom", "prévu", "contrat", [7 jours × ["HH:MM-HH:MM*" | "CP HH:MM"]] ]] } } }
+// Les heures après minuit s'écrivent 24:00 et plus (ex. 22:00-26:30).
 'use strict';
 
 const Planning = (() => {
@@ -19,7 +22,9 @@ const Planning = (() => {
   const mondayOf = (d) => addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -((d.getDay() + 6) % 7));
   const minutes = (hhmm) => { const [h, m] = (hhmm || '0:0').split(/[:hH]/).map(Number); return h * 60 + (m || 0); };
   const fmtDur = (min) => `${Math.floor(min / 60)}h${min % 60 ? pad(min % 60) : ''}`;
-  const fmtTime = (hhmm) => hhmm.replace(':', 'h');
+  const fmtMin = (min) => `${pad(Math.floor(min / 60) % 24)}h${pad(min % 60)}`;
+  const fmtTime = (hhmm) => fmtMin(minutes(hhmm));
+  const norm = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '');
 
   // Durée d'un créneau (gère les nuits qui finissent le lendemain).
   function duration(e) {
@@ -37,17 +42,52 @@ const Planning = (() => {
 
   const validEntries = (list) => (Array.isArray(list) ? list : []).filter((e) => e && /^\d{4}-\d{2}-\d{2}$/.test(e.date || ''));
 
-  // Lit un code planning (STRYXPLAN:<base64 du JSON>) ou du JSON brut.
-  function decode(code) {
-    let text = code.trim();
-    if (/^STRYXPLAN:/i.test(text)) {
-      const b64 = text.slice(10).replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
-      text = new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  const fromB64 = (b64) => Uint8Array.from(atob(b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+  async function inflate(bytes) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+    return new Response(stream).text();
+  }
+
+  // Planning d'équipe (v2) : extrait aussi « mes » créneaux pour la vue personnelle.
+  function fromTeam(obj) {
+    const team = { me: obj.me || '', totals: obj.totals || [], people: Array.isArray(obj.people) ? obj.people : [] };
+    const mine = team.people.find((p) => norm(p[0]) === norm(team.me));
+    const monday = parseDate(obj.week);
+    const entries = [];
+    if (mine) {
+      mine[3].forEach((slots, i) => {
+        const date = iso(addDays(monday, i));
+        const work = slots.filter((s) => !/^CP/i.test(s));
+        const cp = slots.find((s) => /^CP/i.test(s));
+        if (!work.length) entries.push({ date, off: true, label: cp ? `Congé (${fmtDur(minutes(cp.slice(3)))})` : 'Repos' });
+        work.forEach((s) => {
+          const [start, end] = s.replace('*', '').split('-');
+          entries.push({ date, start, end, label: 'Burger King' });
+        });
+      });
     }
+    return {
+      updated: obj.updated || '',
+      weeks: mine ? [{ start: obj.week, contract: mine[2] }] : [],
+      entries,
+      teams: { [obj.week]: team },
+    };
+  }
+
+  // Lit un code planning (STRYXPLAN: JSON en base64, STRYXPLAN2: équipe compressée) ou du JSON brut.
+  async function decode(code) {
+    let text = code.trim();
+    if (/^STRYXPLAN2:/i.test(text)) {
+      const obj = JSON.parse(await inflate(fromB64(text.slice(11))));
+      if (!obj.week || !Array.isArray(obj.people)) throw new Error('format');
+      return fromTeam(obj);
+    }
+    if (/^STRYXPLAN:/i.test(text)) text = new TextDecoder().decode(fromB64(text.slice(10)));
     const obj = JSON.parse(text);
     const entries = validEntries(obj.entries);
     if (!entries.length) throw new Error('vide');
-    return { updated: obj.updated || '', weeks: Array.isArray(obj.weeks) ? obj.weeks : [], entries };
+    return { updated: obj.updated || '', weeks: Array.isArray(obj.weeks) ? obj.weeks : [], entries, teams: {} };
   }
 
   // Fusionne : les jours présents dans le nouveau planning remplacent les anciens.
@@ -59,6 +99,7 @@ const Planning = (() => {
       updated: add.updated || (old && old.updated) || '',
       weeks: [...weeks.values()],
       entries: [...validEntries(old && old.entries).filter((e) => !days.has(e.date)), ...add.entries],
+      teams: { ...((old && old.teams) || {}), ...(add.teams || {}) },
     };
   }
 
@@ -144,16 +185,157 @@ const Planning = (() => {
     $('week-today').hidden = iso(weekStart) === iso(mondayOf(new Date()));
   }
 
+  /* ----- Vue Équipe : un jour, tout le monde, frise horaire ----- */
+
+  let mode = 'me';
+  let teamWeek = null; // clé AAAA-MM-JJ du lundi
+  let teamDay = 0;     // 0 = lundi
+
+  const parseSlot = (s) => {
+    if (/^CP/i.test(s)) return { cp: minutes(s.slice(3)) };
+    const [a, b] = s.replace('*', '').split('-');
+    return { start: minutes(a), end: minutes(b), night: s.includes('*') };
+  };
+
+  function teamKeys() {
+    return Object.keys(data.teams || {}).sort();
+  }
+
+  function renderTeam() {
+    const keys = teamKeys();
+    const team = data.teams[teamWeek];
+    const monday = parseDate(teamWeek);
+    const day = addDays(monday, teamDay);
+    const todayKey = iso(new Date());
+    const end = addDays(monday, 6);
+    $('team-title').textContent = `${monday.getDate()} – ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
+    $('team-sub').textContent = `${team.people.length} personnes · ${day.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+    $('team-prev').disabled = keys.indexOf(teamWeek) <= 0;
+    $('team-next').disabled = keys.indexOf(teamWeek) >= keys.length - 1;
+
+    // Bandeau des jours
+    $('day-strip').replaceChildren(...DAYS.map((name, i) => {
+      const d = addDays(monday, i);
+      const b = el('button', 'day-pill' + (i === teamDay ? ' active' : '') + (iso(d) === todayKey ? ' is-today' : ''));
+      b.append(el('small', '', name), el('b', '', String(d.getDate())));
+      const meSlots = (team.people.find((p) => norm(p[0]) === norm(team.me)) || [, , , []])[3][i] || [];
+      if (meSlots.some((s) => !/^CP/i.test(s))) b.append(el('i', 'me-dot'));
+      b.onclick = () => { teamDay = i; renderTeam(); };
+      return b;
+    }));
+    const active = $('day-strip').children[teamDay];
+    if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+
+    // Personnes du jour
+    const rows = [];
+    const resting = [];
+    for (const p of team.people) {
+      const slots = (p[3][teamDay] || []).map(parseSlot);
+      const isMe = norm(p[0]) === norm(team.me);
+      const work = slots.filter((s) => s.cp === undefined);
+      const leave = slots.find((s) => s.cp !== undefined);
+      const cp = leave ? leave.cp : undefined;
+      if (!work.length && cp === undefined) { resting.push({ name: p[0], isMe }); continue; }
+      rows.push({ name: p[0], isMe, work, cp, first: work.length ? work[0].start : 99999 });
+    }
+    rows.sort((a, b) => (b.isMe - a.isMe) || (a.first - b.first) || a.name.localeCompare(b.name));
+
+    const all = rows.flatMap((r) => r.work);
+    let from = all.length ? Math.floor(Math.min(...all.map((s) => s.start)) / 60) * 60 : 9 * 60;
+    let to = all.length ? Math.ceil(Math.max(...all.map((s) => s.end)) / 60) * 60 : 23 * 60;
+    if (to - from < 6 * 60) to = from + 6 * 60;
+    const span = to - from;
+    const pct = (m) => `${((m - from) / span) * 100}%`;
+    const total = rows.reduce((t, r) => t + r.work.reduce((a, s) => a + s.end - s.start, 0) + (r.cp || 0), 0);
+    const meRow = rows.find((r) => r.isMe);
+    $('team-sum').replaceChildren(
+      el('span', '', `${rows.length} au travail · ${fmtDur(total)}`),
+      el('b', meRow ? 'me-sum' : 'me-sum off', meRow
+        ? (meRow.work.length ? `Toi : ${meRow.work.map((s) => `${fmtMin(s.start)}–${fmtMin(s.end)}`).join(' · ')}` : `Toi : congé ${fmtDur(meRow.cp)}`)
+        : 'Toi : repos'),
+    );
+
+    // Frise
+    const tl = $('timeline');
+    const head = el('div', 'tl-row tl-head');
+    head.append(el('div', 'tl-name'));
+    const scale = el('div', 'tl-track');
+    const step = span > 12 * 60 ? 180 : 120;
+    for (let m = Math.ceil(from / step) * step; m <= to; m += step) {
+      const t = el('span', 'tl-tick', `${pad(Math.floor(m / 60) % 24)}h`);
+      t.style.left = pct(m);
+      scale.append(t);
+    }
+    head.append(scale);
+    const body = [head];
+    for (const r of rows) {
+      const row = el('div', 'tl-row' + (r.isMe ? ' me' : ''));
+      row.append(el('div', 'tl-name', r.name));
+      const track = el('div', 'tl-track');
+      for (let m = Math.ceil(from / step) * step; m <= to; m += step) {
+        const g = el('i', 'tl-grid');
+        g.style.left = pct(m);
+        track.append(g);
+      }
+      for (const s of r.work) {
+        const bar = el('button', 'tl-bar' + (s.night ? ' night' : ''));
+        bar.style.left = pct(s.start);
+        bar.style.width = `${((s.end - s.start) / span) * 100}%`;
+        const short = (m) => `${Math.floor(m / 60) % 24}h${m % 60 ? pad(m % 60) : ''}`;
+        const ratio = (s.end - s.start) / span;
+        bar.textContent = ratio > 0.27 ? `${short(s.start)}–${short(s.end)}` : ratio > 0.12 ? short(s.start) : '';
+        bar.onclick = () => window.toast && window.toast(`${r.name} · ${fmtMin(s.start)} – ${fmtMin(s.end)} (${fmtDur(s.end - s.start)})`);
+        track.append(bar);
+      }
+      if (r.cp !== undefined && !r.work.length) track.append(el('span', 'tl-cp', `Congé · ${fmtDur(r.cp)}`));
+      row.append(track);
+      body.push(row);
+    }
+    // Ligne « maintenant »
+    if (iso(day) === todayKey) {
+      const now = new Date();
+      const m = now.getHours() * 60 + now.getMinutes();
+      if (m >= from && m <= to) {
+        const line = el('i', 'tl-now');
+        line.style.left = `calc(var(--tl-name) + (100% - var(--tl-name)) * ${(m - from) / span})`;
+        body.push(line);
+      }
+    }
+    if (!rows.length) body.push(el('p', 'rest', 'Personne ne travaille ce jour-là.'));
+    const inner = el('div', 'tl-inner');
+    inner.append(...body);
+    tl.replaceChildren(inner);
+
+    $('rest-list').replaceChildren(
+      ...(resting.length ? [el('small', '', `En repos (${resting.length})`)] : []),
+      ...resting.map((r) => el('span', 'rest-chip' + (r.isMe ? ' me' : ''), r.name)),
+    );
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('#plan-mode button').forEach((b) => b.classList.toggle('active', b.dataset.mode === m));
+    $('plan-me').hidden = m !== 'me';
+    $('plan-team').hidden = m !== 'team';
+    if (m === 'team') renderTeam();
+  }
+
   function show(planning) {
     const fresh = planning || { entries: [] };
-    if (data !== fresh) weekStart = null;
+    if (data !== fresh) { weekStart = null; teamWeek = null; }
     data = fresh;
     data.entries = validEntries(data.entries);
-    const empty = !data.entries.length;
+    const empty = !data.entries.length && !teamKeys().length;
     $('plan-empty').hidden = !empty;
-    $('days').hidden = empty;
-    document.querySelector('#tab-plan .week-nav').hidden = empty;
-    if (empty) { $('plan-next').hidden = true; $('week-today').hidden = true; $('plan-foot').textContent = ''; return; }
+    $('plan-me').hidden = empty;
+    $('plan-mode').hidden = empty || !teamKeys().length;
+    if (empty) { $('plan-team').hidden = true; $('plan-foot').textContent = ''; return; }
+    if (teamKeys().length && !teamWeek) {
+      const current = iso(mondayOf(new Date()));
+      teamWeek = teamKeys().includes(current) ? current : teamKeys()[teamKeys().length - 1];
+      teamDay = teamWeek === current ? (new Date().getDay() + 6) % 7 : 0;
+    }
+    if (!teamKeys().length) mode = 'me';
     if (!weekStart) {
       // Semaine en cours, ou la première semaine du planning si celui-ci commence plus tard.
       const first = data.entries.map((e) => e.date).sort()[0];
@@ -162,6 +344,7 @@ const Planning = (() => {
     }
     renderNext();
     renderWeek();
+    setMode(mode);
     $('plan-foot').textContent = (data.updated ? `Planning mis à jour le ${parseDate(data.updated).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}. ` : '')
       + 'Nouveau planning ? Envoie la photo à Claude.';
   }
@@ -169,6 +352,21 @@ const Planning = (() => {
   $('week-prev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
   $('week-next').onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
   $('week-today').onclick = () => { weekStart = mondayOf(new Date()); renderWeek(); };
+  document.querySelectorAll('#plan-mode button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
+  $('team-prev').onclick = () => { const k = teamKeys(); teamWeek = k[Math.max(0, k.indexOf(teamWeek) - 1)]; renderTeam(); };
+  $('team-next').onclick = () => { const k = teamKeys(); teamWeek = k[Math.min(k.length - 1, k.indexOf(teamWeek) + 1)]; renderTeam(); };
+
+  // Glisser à gauche / à droite sur la frise pour changer de jour.
+  let touchX = null;
+  $('plan-team').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  $('plan-team').addEventListener('touchend', (e) => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) < 60) return;
+    teamDay = Math.min(6, Math.max(0, teamDay + (dx < 0 ? 1 : -1)));
+    renderTeam();
+  }, { passive: true });
 
   return { show, decode, merge };
 })();
