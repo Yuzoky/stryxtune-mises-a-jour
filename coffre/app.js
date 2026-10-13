@@ -1,0 +1,531 @@
+'use strict';
+
+const STORE_KEY = 'stryx-vault';
+const SETTINGS_KEY = 'stryx-vault-settings';
+const CLIPBOARD_CLEAR_MS = 30000;
+const CATEGORIES = [
+  { id: 'jeux', label: 'Jeux', icon: '🎮' },
+  { id: 'social', label: 'Réseaux', icon: '💬' },
+  { id: 'mail', label: 'E-mail', icon: '✉' },
+  { id: 'banque', label: 'Banque', icon: '💳' },
+  { id: 'travail', label: 'Travail', icon: '💼' },
+  { id: 'autre', label: 'Autre', icon: '◆' },
+];
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  session: null,      // { key, salt, iterations } — uniquement en mémoire
+  items: [],
+  filter: 'all',
+  query: '',
+  current: null,      // identifiant ouvert dans la feuille de détail
+  pendingImport: null,
+  hiddenAt: 0,
+  lockTimer: 0,
+};
+
+/* ---------- Stockage ---------- */
+
+const storage = {
+  get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
+  set(key, val) { localStorage.setItem(key, JSON.stringify(val)); },
+  remove(key) { try { localStorage.removeItem(key); } catch { /* ignoré */ } },
+};
+
+const settings = Object.assign({ autolock: 300 }, storage.get(SETTINGS_KEY));
+
+async function persist() {
+  const blob = await VaultCrypto.encrypt(state.session, { items: state.items });
+  storage.set(STORE_KEY, blob);
+}
+
+/* ---------- Utilitaires UI ---------- */
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function openSheet(id) {
+  const s = $(id);
+  s.hidden = false;
+  requestAnimationFrame(() => s.classList.add('open'));
+}
+function closeSheet(id) {
+  const s = $(id);
+  s.classList.remove('open');
+  setTimeout(() => { s.hidden = true; }, 220);
+}
+function closeAllSheets() {
+  document.querySelectorAll('.sheet').forEach((s) => { s.classList.remove('open'); s.hidden = true; });
+}
+
+function setStrength(el, pw) {
+  const score = VaultCrypto.strength(pw);
+  el.dataset.score = score;
+  el.title = ['', 'Faible', 'Moyen', 'Bon', 'Excellent'][score];
+}
+
+const catOf = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+
+function safeUrl(u) {
+  if (!u) return '';
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u;
+  try {
+    const url = new URL(withScheme);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+  } catch { return ''; }
+}
+
+async function copy(text, label) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(`${label} copié · effacé dans 30 s`);
+    setTimeout(async () => {
+      try {
+        if (document.hasFocus() && (await navigator.clipboard.readText()) === text) await navigator.clipboard.writeText('');
+      } catch { /* lecture du presse-papiers refusée : rien à faire */ }
+    }, CLIPBOARD_CLEAR_MS);
+  } catch {
+    toast('Copie impossible sur cet appareil');
+  }
+}
+
+/* ---------- Fond étoilé ---------- */
+
+function starfield() {
+  const c = $('stars');
+  const ctx = c.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let stars = [];
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    c.width = innerWidth * dpr;
+    c.height = innerHeight * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = Math.round((innerWidth * innerHeight) / 5000);
+    stars = Array.from({ length: n }, () => ({
+      x: Math.random() * innerWidth,
+      y: Math.random() * innerHeight,
+      r: Math.random() * 1.2 + 0.2,
+      a: Math.random(),
+      s: Math.random() * 0.015 + 0.003,
+      v: Math.random() * 0.08 + 0.02,
+    }));
+  }
+  function frame() {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (const st of stars) {
+      st.a += st.s;
+      st.y -= st.v;
+      if (st.y < 0) st.y = innerHeight;
+      ctx.globalAlpha = 0.25 + Math.abs(Math.sin(st.a)) * 0.75;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (!reduce && !document.hidden) requestAnimationFrame(frame);
+  }
+  resize();
+  frame();
+  addEventListener('resize', () => { resize(); if (reduce) frame(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !reduce) frame(); });
+}
+
+/* ---------- Écran de verrouillage ---------- */
+
+function lockMode() {
+  const exists = !!storage.get(STORE_KEY);
+  const creating = !exists && !state.pendingImport;
+  $('confirm-field').hidden = !creating;
+  $('master2').required = creating;
+  $('strength-master').hidden = !creating;
+  $('lock-btn').textContent = state.pendingImport ? 'Restaurer' : creating ? 'Créer mon coffre' : 'Déverrouiller';
+  $('lock-hint').textContent = state.pendingImport
+    ? 'Entrez le mot de passe maître de la sauvegarde.'
+    : creating
+      ? 'Choisissez un mot de passe maître. Il protège tout le coffre et ne peut pas être récupéré : ne l\'oubliez pas.'
+      : '';
+  $('master').autocomplete = creating ? 'new-password' : 'current-password';
+  $('restore-btn').textContent = state.pendingImport ? 'Annuler la restauration' : 'Restaurer une sauvegarde';
+  return creating;
+}
+
+function lock() {
+  state.session = null;
+  state.items = [];
+  state.current = null;
+  clearTimeout(state.lockTimer);
+  closeAllSheets();
+  $('list').replaceChildren();
+  $('vault').hidden = true;
+  $('lock').hidden = false;
+  $('master').value = '';
+  $('master2').value = '';
+  $('lock-error').textContent = '';
+  lockMode();
+}
+
+async function onUnlock(e) {
+  e.preventDefault();
+  const pw = $('master').value;
+  const err = $('lock-error');
+  const btn = $('lock-btn');
+  err.textContent = '';
+  const creating = lockMode();
+
+  if (creating) {
+    if (pw.length < 8) { err.textContent = '8 caractères minimum.'; return; }
+    if (pw !== $('master2').value) { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  }
+
+  btn.disabled = true;
+  btn.classList.add('loading');
+  try {
+    if (creating) {
+      state.session = await VaultCrypto.newKey(pw);
+      state.items = [];
+      await persist();
+    } else {
+      const blob = state.pendingImport || storage.get(STORE_KEY);
+      const res = await VaultCrypto.open(pw, blob);
+      state.session = res.session;
+      state.items = Array.isArray(res.data.items) ? res.data.items : [];
+      if (state.pendingImport) {
+        storage.set(STORE_KEY, state.pendingImport);
+        state.pendingImport = null;
+        toast('Sauvegarde restaurée');
+      }
+    }
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    $('master').value = '';
+    $('master2').value = '';
+    $('lock').hidden = true;
+    $('vault').hidden = false;
+    render();
+    armAutolock();
+  } catch (ex) {
+    err.textContent = ex && ex.message === 'format' ? 'Fichier de sauvegarde invalide.' : 'Mot de passe incorrect.';
+    $('lock-form').classList.remove('shake');
+    void $('lock-form').offsetWidth;
+    $('lock-form').classList.add('shake');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+}
+
+/* ---------- Verrouillage automatique ---------- */
+
+function armAutolock() {
+  clearTimeout(state.lockTimer);
+  if (!state.session || !settings.autolock) return;
+  state.lockTimer = setTimeout(lock, settings.autolock * 1000);
+}
+
+['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach((ev) =>
+  addEventListener(ev, () => { if (state.session) armAutolock(); }, { passive: true, capture: true }));
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { state.hiddenAt = Date.now(); return; }
+  // En revenant dans l'appli : verrouille si on est resté absent trop longtemps (30 s max).
+  const limit = settings.autolock ? Math.min(settings.autolock, 30) * 1000 : 0;
+  if (state.session && limit && Date.now() - state.hiddenAt >= limit) lock();
+});
+
+/* ---------- Liste ---------- */
+
+function renderChips() {
+  const chips = $('chips');
+  const counts = {};
+  state.items.forEach((it) => { counts[it.cat] = (counts[it.cat] || 0) + 1; });
+  const all = [{ id: 'all', label: 'Tout', icon: '✦' }, ...CATEGORIES.filter((c) => counts[c.id])];
+  if (!all.some((c) => c.id === state.filter)) state.filter = 'all';
+  chips.replaceChildren(...all.map((c) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (state.filter === c.id ? ' active' : '');
+    b.textContent = `${c.icon} ${c.label}`;
+    b.onclick = () => { state.filter = c.id; render(); };
+    return b;
+  }));
+}
+
+function render() {
+  renderChips();
+  const q = state.query.trim().toLowerCase();
+  const list = state.items
+    .filter((it) => state.filter === 'all' || it.cat === state.filter)
+    .filter((it) => !q || [it.title, it.user, it.url].some((v) => (v || '').toLowerCase().includes(q)))
+    .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+
+  const weak = state.items.filter((it) => it.pass && VaultCrypto.strength(it.pass) < 2).length;
+  $('stats').textContent = state.items.length
+    ? `${state.items.length} identifiant${state.items.length > 1 ? 's' : ''}` + (weak ? ` · ⚠ ${weak} faible${weak > 1 ? 's' : ''}` : ' · tous sécurisés')
+    : '';
+
+  $('empty').hidden = state.items.length > 0;
+  $('list').replaceChildren(...list.map((it, i) => {
+    const li = document.createElement('li');
+    li.className = 'item glass';
+    li.style.animationDelay = Math.min(i * 30, 300) + 'ms';
+    const av = document.createElement('div');
+    av.className = 'avatar';
+    av.textContent = (it.title[0] || '?').toUpperCase();
+    const txt = document.createElement('div');
+    txt.className = 'item-txt';
+    const t = document.createElement('b');
+    t.textContent = it.title;
+    const u = document.createElement('span');
+    u.textContent = it.user || catOf(it.cat).label;
+    txt.append(t, u);
+    const cp = document.createElement('button');
+    cp.className = 'icon-btn';
+    cp.setAttribute('aria-label', 'Copier le mot de passe');
+    cp.textContent = '⧉';
+    cp.onclick = (e) => { e.stopPropagation(); copy(it.pass, 'Mot de passe'); };
+    li.append(av, txt, cp);
+    li.onclick = () => openView(it.id);
+    return li;
+  }));
+}
+
+/* ---------- Détail ---------- */
+
+function openView(id) {
+  const it = state.items.find((x) => x.id === id);
+  if (!it) return;
+  state.current = id;
+  $('v-avatar').textContent = (it.title[0] || '?').toUpperCase();
+  $('v-title').textContent = it.title;
+  $('v-cat').textContent = `${catOf(it.cat).icon} ${catOf(it.cat).label}`;
+  $('v-user').textContent = it.user || '—';
+  $('v-pass').textContent = '••••••••••';
+  $('v-pass').dataset.shown = '';
+  const href = safeUrl(it.url);
+  $('v-url-row').hidden = !it.url;
+  $('v-url').textContent = it.url || '';
+  if (href) $('v-url').href = href; else $('v-url').removeAttribute('href');
+  $('v-notes-row').hidden = !it.notes;
+  $('v-notes').textContent = it.notes || '';
+  $('v-date').textContent = 'Modifié le ' + new Date(it.updated).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
+  openSheet('view-sheet');
+}
+
+$('v-eye').onclick = () => {
+  const it = state.items.find((x) => x.id === state.current);
+  const el = $('v-pass');
+  const show = !el.dataset.shown;
+  el.dataset.shown = show ? '1' : '';
+  el.textContent = show ? (it.pass || '—') : '••••••••••';
+};
+
+document.querySelectorAll('[data-copy]').forEach((b) => {
+  b.onclick = () => {
+    const it = state.items.find((x) => x.id === state.current);
+    if (!it) return;
+    if (b.dataset.copy === 'pass') copy(it.pass, 'Mot de passe');
+    else copy(it.user, 'Identifiant');
+  };
+});
+
+$('v-edit').onclick = () => { closeSheet('view-sheet'); openEdit(state.current); };
+
+/* ---------- Ajout / modification ---------- */
+
+$('f-cat').replaceChildren(...CATEGORIES.map((c) => {
+  const o = document.createElement('option');
+  o.value = c.id;
+  o.textContent = `${c.icon} ${c.label}`;
+  return o;
+}));
+
+function openEdit(id) {
+  const it = id ? state.items.find((x) => x.id === id) : null;
+  state.current = it ? it.id : null;
+  $('edit-title').textContent = it ? 'Modifier' : 'Nouvel identifiant';
+  $('f-title').value = it ? it.title : '';
+  $('f-user').value = it ? it.user : '';
+  $('f-pass').value = it ? it.pass : '';
+  $('f-pass').type = 'password';
+  $('f-url').value = it ? it.url : '';
+  $('f-cat').value = it ? it.cat : (state.filter !== 'all' ? state.filter : 'jeux');
+  $('f-notes').value = it ? it.notes : '';
+  $('del-btn').hidden = !it;
+  setStrength($('strength-f'), $('f-pass').value);
+  openSheet('edit-sheet');
+  if (!it) setTimeout(() => $('f-title').focus(), 250);
+}
+
+$('f-pass').addEventListener('input', () => setStrength($('strength-f'), $('f-pass').value));
+
+$('edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const now = Date.now();
+  const data = {
+    title: $('f-title').value.trim(),
+    user: $('f-user').value.trim(),
+    pass: $('f-pass').value,
+    url: $('f-url').value.trim(),
+    cat: $('f-cat').value,
+    notes: $('f-notes').value.trim(),
+    updated: now,
+  };
+  if (!data.title) return;
+  const existing = state.items.find((x) => x.id === state.current);
+  if (existing) Object.assign(existing, data);
+  else state.items.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(now) + Math.random(), created: now, ...data });
+  await persist();
+  closeSheet('edit-sheet');
+  render();
+  toast(existing ? 'Modifié' : 'Enregistré');
+});
+
+$('del-btn').onclick = async () => {
+  const it = state.items.find((x) => x.id === state.current);
+  if (!it || !confirm(`Supprimer « ${it.title} » ?`)) return;
+  state.items = state.items.filter((x) => x.id !== it.id);
+  await persist();
+  closeSheet('edit-sheet');
+  render();
+  toast('Supprimé');
+};
+
+/* ---------- Générateur ---------- */
+
+function regen() {
+  const len = +$('gen-len').value;
+  $('gen-len-v').textContent = len;
+  const pw = VaultCrypto.generate(len, {
+    upper: $('g-up').checked, lower: $('g-low').checked, digits: $('g-num').checked, symbols: $('g-sym').checked,
+  });
+  $('gen-out').textContent = pw;
+  setStrength($('strength-g'), pw);
+}
+['gen-len', 'g-up', 'g-low', 'g-num', 'g-sym'].forEach((id) => $(id).addEventListener('input', regen));
+$('gen-again').onclick = regen;
+$('gen-open').onclick = () => { regen(); openSheet('gen-sheet'); };
+$('gen-use').onclick = () => {
+  $('f-pass').value = $('gen-out').textContent;
+  $('f-pass').type = 'text';
+  setStrength($('strength-f'), $('f-pass').value);
+  closeSheet('gen-sheet');
+};
+
+/* ---------- Paramètres ---------- */
+
+$('settings-btn').onclick = () => { $('s-autolock').value = String(settings.autolock); openSheet('settings-sheet'); };
+$('s-autolock').onchange = () => {
+  settings.autolock = +$('s-autolock').value;
+  storage.set(SETTINGS_KEY, settings);
+  armAutolock();
+};
+
+$('s-export').onclick = () => {
+  const blob = storage.get(STORE_KEY);
+  if (!blob) return;
+  const file = new Blob([JSON.stringify(blob)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = `stryx-vault-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Sauvegarde exportée (chiffrée)');
+};
+
+function pickBackup() { $('file-in').value = ''; $('file-in').click(); }
+$('s-import').onclick = () => {
+  if (confirm('Importer une sauvegarde remplacera le coffre actuel. Continuer ?')) pickBackup();
+};
+$('restore-btn').onclick = () => {
+  if (state.pendingImport) { state.pendingImport = null; lock(); return; }
+  if (!storage.get(STORE_KEY) || confirm('Restaurer une sauvegarde remplacera le coffre de cet appareil. Continuer ?')) pickBackup();
+};
+$('file-in').onchange = async () => {
+  const f = $('file-in').files[0];
+  if (!f) return;
+  try {
+    const blob = JSON.parse(await f.text());
+    if (!blob || blob.app !== 'stryx-vault') throw new Error();
+    lock();
+    state.pendingImport = blob;
+    lockMode();
+    $('master').focus();
+  } catch {
+    toast('Fichier de sauvegarde invalide');
+  }
+};
+
+$('s-change').onclick = () => {
+  closeSheet('settings-sheet');
+  ['pw-old', 'pw-new', 'pw-new2'].forEach((id) => { $(id).value = ''; });
+  $('pw-error').textContent = '';
+  setStrength($('strength-pw'), '');
+  openSheet('pw-sheet');
+};
+$('pw-new').addEventListener('input', () => setStrength($('strength-pw'), $('pw-new').value));
+$('pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('pw-error');
+  if ($('pw-new').value !== $('pw-new2').value) { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  try {
+    await VaultCrypto.open($('pw-old').value, storage.get(STORE_KEY));
+  } catch {
+    err.textContent = 'Mot de passe actuel incorrect.';
+    return;
+  }
+  state.session = await VaultCrypto.newKey($('pw-new').value);
+  await persist();
+  closeSheet('pw-sheet');
+  toast('Mot de passe maître changé');
+});
+
+$('s-wipe').onclick = () => {
+  if (!confirm('Effacer définitivement tous les mots de passe de cet appareil ?')) return;
+  if (!confirm('Dernière confirmation : cette action est irréversible.')) return;
+  storage.remove(STORE_KEY);
+  lock();
+  toast('Coffre effacé');
+};
+
+/* ---------- Câblage général ---------- */
+
+$('lock-form').addEventListener('submit', onUnlock);
+$('master').addEventListener('input', () => {
+  if (!$('strength-master').hidden) setStrength($('strength-master'), $('master').value);
+});
+$('lock-now').onclick = lock;
+$('add-btn').onclick = () => openEdit(null);
+$('search').addEventListener('input', (e) => { state.query = e.target.value; render(); });
+
+document.querySelectorAll('[data-toggle]').forEach((b) => {
+  b.onclick = () => {
+    const input = $(b.dataset.toggle);
+    input.type = input.type === 'password' ? 'text' : 'password';
+  };
+});
+document.querySelectorAll('[data-close]').forEach((b) => {
+  b.onclick = () => closeSheet(b.closest('.sheet').id);
+});
+document.querySelectorAll('.sheet').forEach((s) => {
+  s.addEventListener('click', (e) => { if (e.target === s) closeSheet(s.id); });
+});
+
+if (!window.crypto || !crypto.subtle) {
+  $('lock-error').textContent = 'Cet appareil/navigateur ne prend pas en charge le chiffrement requis (HTTPS obligatoire).';
+  $('lock-btn').disabled = true;
+}
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+starfield();
+lockMode();
