@@ -54,6 +54,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private String pendingSave;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    // Survit à la fermeture de l'écran : l'effacement du presse-papiers a lieu même si on quitte l'appli.
+    private static final Handler CLIPBOARD_HANDLER = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -227,14 +229,42 @@ public class MainActivity extends Activity {
                 extras.putBoolean(Build.VERSION.SDK_INT >= 33 ? ClipDescription.EXTRA_IS_SENSITIVE : "android.content.extra.IS_SENSITIVE", true);
                 clip.getDescription().setExtras(extras);
                 cm.setPrimaryClip(clip);
-                handler.postDelayed(() -> {
+                final Context app = getApplicationContext();
+                CLIPBOARD_HANDLER.removeCallbacksAndMessages(null);
+                CLIPBOARD_HANDLER.postDelayed(() -> {
+                    // Android 10+ : en arrière-plan, le contenu n'est plus lisible (null) ; on efface quand même.
                     ClipData current = cm.getPrimaryClip();
-                    if (current != null && current.getItemCount() > 0
-                            && text.contentEquals(current.getItemAt(0).coerceToText(MainActivity.this))) {
+                    boolean ours = current == null || (current.getItemCount() > 0
+                            && text.contentEquals(current.getItemAt(0).coerceToText(app)));
+                    if (ours) {
                         if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip();
                         else cm.setPrimaryClip(ClipData.newPlainText("", ""));
                     }
                 }, CLIPBOARD_CLEAR_MS);
+            });
+        }
+
+        /** Copie sans effacement automatique (texte non secret, ex. code de liaison). */
+        @JavascriptInterface
+        public void copyPlain(String text) {
+            handler.post(() -> {
+                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(ClipData.newPlainText("Stryx Hub", text));
+            });
+        }
+
+        /** Partage d'un texte non secret (ex. code de liaison vers l'appli Claude). */
+        @JavascriptInterface
+        public void shareText(String text) {
+            handler.post(() -> {
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("text/plain");
+                send.putExtra(Intent.EXTRA_TEXT, text);
+                try {
+                    startActivity(Intent.createChooser(send, "Envoyer le code"));
+                } catch (ActivityNotFoundException e) {
+                    Toast.makeText(MainActivity.this, "Aucune appli pour partager", Toast.LENGTH_LONG).show();
+                }
             });
         }
 

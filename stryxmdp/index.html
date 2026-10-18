@@ -200,7 +200,7 @@
         <div class="empty" id="plan-empty" hidden>
           <div class="empty-ic"><svg class="ic"><use href="#i-calendar"/></svg></div>
           <p>Aucun planning pour l'instant.</p>
-          <p class="muted">Connecte le <b>planning automatique</b> une fois : Claude l'enverra ensuite directement ici.</p>
+          <p class="muted" id="plan-empty-txt">Connecte le <b>planning automatique</b> une fois : Claude l'enverra ensuite directement ici.</p>
         </div>
 
         <div class="plan-tools">
@@ -345,7 +345,7 @@
       <div class="grab"></div>
       <div class="view-head">
         <div class="avatar lg" id="v-avatar"></div>
-        <div><h2 id="v-title"></h2><p class="muted" id="v-cat"></p></div>
+        <div class="view-txt"><h2 id="v-title"></h2><p class="muted" id="v-cat"></p></div>
       </div>
       <div class="kv"><span>Identifiant</span><b id="v-user"></b><button class="icon-btn sm" data-copy="user" aria-label="Copier l'identifiant"><svg class="ic"><use href="#i-copy"/></svg></button></div>
       <div class="kv"><span>Mot de passe</span><b id="v-pass" class="mono">••••••••</b>
@@ -398,7 +398,7 @@
         </ol>
       </div>
       <div id="sync-on" hidden>
-        <p class="muted small" id="sync-intro">Envoie ce code à Claude <b>une seule fois</b> (c'est une clé publique, elle ne permet pas de lire ton coffre) :</p>
+        <p class="muted small" id="sync-intro">Envoie ce code à Claude <b>une seule fois</b> : touche <b>Partager</b> et choisis l'appli Claude, ou copie-le et colle-le dans la conversation. C'est une clé publique, elle ne permet pas de lire ton coffre.</p>
         <div class="code-box mono" id="sync-code" role="button" title="Toucher pour copier"></div>
         <div class="sync-state" id="sync-status"></div>
       </div>
@@ -409,8 +409,9 @@
       </div>
       <div class="row" id="sync-actions-on" hidden>
         <button type="button" class="btn danger" id="sync-unlink" aria-label="Déconnecter"><svg class="ic"><use href="#i-trash"/></svg></button>
-        <button type="button" class="btn" id="sync-copy"><svg class="ic"><use href="#i-copy"/></svg> Copier le code</button>
-        <button type="button" class="btn primary" id="sync-refresh"><svg class="ic"><use href="#i-refresh"/></svg> Actualiser</button>
+        <button type="button" class="btn" id="sync-copy"><svg class="ic"><use href="#i-copy"/></svg> Copier</button>
+        <button type="button" class="btn" id="sync-share"><svg class="ic"><use href="#i-upload"/></svg> Partager</button>
+        <button type="button" class="btn primary" id="sync-refresh" aria-label="Actualiser"><svg class="ic"><use href="#i-refresh"/></svg></button>
       </div>
     </div>
   </div>

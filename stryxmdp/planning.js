@@ -50,7 +50,45 @@ const Planning = (() => {
     return new Response(stream).text();
   }
 
-  const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || '';
+  // Prénom affiché : « El Hadji Malick Diene » → « El Hadji ».
+  function firstName(name) {
+    const parts = String(name || '').trim().split(/\s+/);
+    if (parts.length > 1 && /^(el|al|de|da|di|du|le|la|ben|abd|abdel|mc|mac|van|von)$/i.test(parts[0])) return `${parts[0]} ${parts[1]}`;
+    return parts[0] || '';
+  }
+
+  const SLOT_RE = /^(\d{1,2}:\d{2}-\d{1,2}:\d{2}\*?|CP \d{1,2}:\d{2})$/i;
+  const HHMM_RE = /^\d{1,2}:\d{2}$/;
+
+  // Nettoie un planning d'équipe : tout ce qui n'a pas la bonne forme est ignoré,
+  // pour qu'une donnée abîmée ne puisse jamais casser l'affichage.
+  function cleanTeam(t) {
+    if (!t || typeof t !== 'object') return null;
+    const people = (Array.isArray(t.people) ? t.people : [])
+      .filter((p) => Array.isArray(p) && typeof p[0] === 'string' && p[0].trim() && Array.isArray(p[3]))
+      .map((p) => [
+        p[0].trim().slice(0, 80),
+        HHMM_RE.test(p[1]) ? p[1] : '',
+        HHMM_RE.test(p[2]) ? p[2] : '',
+        [0, 1, 2, 3, 4, 5, 6].map((i) => (Array.isArray(p[3][i]) ? p[3][i] : [])
+          .filter((s) => typeof s === 'string' && SLOT_RE.test(s.trim())).map((s) => s.trim())
+          .filter((s) => /^CP/i.test(s) || minutes(s.split('-')[1]) > minutes(s.split('-')[0]))),
+      ]);
+    if (!people.length) return null;
+    const swaps = (Array.isArray(t.swaps) ? t.swaps : [])
+      .filter((s) => s && Number.isInteger(s.day) && s.day >= 0 && s.day <= 6 && typeof s.a === 'string' && typeof s.b === 'string');
+    return { me: typeof t.me === 'string' ? t.me : '', totals: Array.isArray(t.totals) ? t.totals.filter((x) => typeof x === 'string') : [], people, swaps };
+  }
+
+  function cleanTeams(teams) {
+    const out = {};
+    for (const [k, v] of Object.entries(teams && typeof teams === 'object' ? teams : {})) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+      const t = cleanTeam(v);
+      if (t) out[k] = t;
+    }
+    return out;
+  }
 
   // Nom de la personne avec qui `name` a échangé son créneau ce jour-là (ou '').
   function swapWith(team, name, day) {
@@ -61,8 +99,9 @@ const Planning = (() => {
 
   // Planning d'équipe (v2) : extrait aussi « mes » créneaux pour la vue personnelle.
   function fromTeam(obj) {
-    const swaps = (Array.isArray(obj.swaps) ? obj.swaps : []).filter((s) => s && Number.isInteger(s.day) && s.a && s.b);
-    const team = { me: obj.me || '', totals: obj.totals || [], people: Array.isArray(obj.people) ? obj.people : [], swaps };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(obj.week || '')) throw new Error('format');
+    const team = cleanTeam(obj);
+    if (!team) throw new Error('format');
     const mine = team.people.find((p) => norm(p[0]) === norm(team.me));
     const monday = parseDate(obj.week);
     const entries = [];
@@ -91,15 +130,29 @@ const Planning = (() => {
   // Lit un code planning (STRYXPLAN: JSON en base64, STRYXPLAN2: équipe compressée) ou du JSON brut.
   // Tolérant au copier-coller : texte autour, retours à la ligne, ``` … ; code compressé ou non.
   async function decode(code) {
-    let text = code.trim();
+    let text = String(code || '').trim();
+    if (!text) throw new Error('empty');
+    if (/STRYXKEY\s*:/i.test(text) && !/STRYXPLAN/i.test(text)) throw new Error('linkcode');
     const m = text.match(/STRYXPLAN2?\s*:\s*([A-Za-z0-9+/=_\-\s]+)/i);
     if (m) {
-      const bytes = fromB64(m[1]);
-      if (bytes[0] === 0x7b) text = new TextDecoder().decode(bytes); // JSON non compressé
-      else {
-        if (typeof DecompressionStream === 'undefined') throw new Error('inflate');
-        try { text = await inflate(bytes); } catch { throw new Error('inflate'); }
+      // Le code peut être coupé sur plusieurs lignes et suivi d'un message : on essaie
+      // du plus long au plus court morceau jusqu'à trouver un contenu valide.
+      const tokens = m[1].trim().split(/\s+/);
+      let found = null;
+      let compressed = false;
+      for (let n = tokens.length; n > 0 && !found; n--) {
+        let bytes;
+        try { bytes = fromB64(tokens.slice(0, n).join('')); } catch { continue; }
+        if (bytes[0] === 0x7b) {
+          try { found = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* morceau suivant */ }
+        } else {
+          compressed = true;
+          if (typeof DecompressionStream === 'undefined') continue;
+          try { found = JSON.parse(await inflate(bytes)); } catch { /* morceau suivant */ }
+        }
       }
+      if (!found) throw new Error(compressed && typeof DecompressionStream === 'undefined' ? 'inflate' : 'format');
+      text = JSON.stringify(found);
     }
     const obj = JSON.parse(text);
     if (Array.isArray(obj.people)) {
@@ -114,13 +167,17 @@ const Planning = (() => {
   // Fusionne : les jours présents dans le nouveau planning remplacent les anciens.
   function merge(old, add) {
     const days = new Set(add.entries.map((e) => e.date));
+    for (const wk of Object.keys(add.teams || {})) {
+      const start = parseDate(wk);
+      for (let i = 0; i < 7; i++) days.add(iso(addDays(start, i)));
+    }
     const weeks = new Map(((old && old.weeks) || []).map((w) => [w.start, w]));
     add.weeks.forEach((w) => weeks.set(w.start, w));
     return {
       updated: add.updated || (old && old.updated) || '',
       weeks: [...weeks.values()],
       entries: [...validEntries(old && old.entries).filter((e) => !days.has(e.date)), ...add.entries],
-      teams: { ...((old && old.teams) || {}), ...(add.teams || {}) },
+      teams: { ...cleanTeams(old && old.teams), ...cleanTeams(add.teams) },
     };
   }
 
@@ -145,7 +202,7 @@ const Planning = (() => {
     const diff = Math.round((at - now) / 60000);
     const when = ongoing ? 'En ce moment'
       : diff < 60 ? `Dans ${diff} min`
-        : diff < 24 * 60 ? `Dans ${fmtDur(Math.round(diff / 60) * 60)}`
+        : diff < 24 * 60 ? `Dans ${Math.floor(diff / 60)} h${diff % 60 ? ' ' + pad(diff % 60) : ''}`
           : `${DAYS_LONG[(at.getDay() + 6) % 7]} ${at.getDate()} ${at.toLocaleDateString('fr-FR', { month: 'long' })}`;
     box.replaceChildren(
       el('small', '', ongoing ? 'En cours' : 'Prochain créneau'),
@@ -157,11 +214,7 @@ const Planning = (() => {
 
   function renderWeek() {
     const today = iso(new Date());
-    const end = addDays(weekStart, 6);
-    const sameMonth = weekStart.getMonth() === end.getMonth();
-    $('week-title').textContent = sameMonth
-      ? `${weekStart.getDate()} – ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`
-      : `${weekStart.getDate()} ${weekStart.toLocaleDateString('fr-FR', { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'short' })}`;
+    $('week-title').textContent = rangeLabel(weekStart);
 
     let total = 0;
     let worked = 0;
@@ -197,12 +250,18 @@ const Planning = (() => {
       li.append(date, body);
       items.push(li);
     }
-    $('days').replaceChildren(...items);
+    const weekDays = new Set([0, 1, 2, 3, 4, 5, 6].map((i) => iso(addDays(weekStart, i))));
+    const hasWeek = data.entries.some((e) => weekDays.has(e.date)) || !!(data.teams || {})[iso(weekStart)];
+    if (hasWeek) $('days').replaceChildren(...items);
+    else {
+      const li = el('li', 'day glass no-week');
+      li.append(el('div', 'rest', 'Pas encore de planning pour cette semaine.'));
+      $('days').replaceChildren(li);
+    }
     const week = (data.weeks || []).find((w) => w.start === iso(weekStart));
     const contract = week && week.contract ? ` · contrat ${fmtDur(minutes(week.contract))}` : '';
-    $('week-sub').textContent = total
-      ? `${fmtDur(total)} sur ${worked} jour${worked > 1 ? 's' : ''}${contract}`
-      : 'Aucun créneau cette semaine';
+    $('week-sub').textContent = !hasWeek ? 'Pas de planning'
+      : total ? `${fmtDur(total)} sur ${worked} jour${worked > 1 ? 's' : ''}${contract}` : 'Aucun créneau cette semaine';
     $('week-today').hidden = iso(weekStart) === iso(mondayOf(new Date()));
   }
 
@@ -229,7 +288,7 @@ const Planning = (() => {
     const day = addDays(monday, teamDay);
     const todayKey = iso(new Date());
     const end = addDays(monday, 6);
-    $('team-title').textContent = `${monday.getDate()} – ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
+    $('team-title').textContent = rangeLabel(monday);
     $('team-sub').textContent = `${team.people.length} personnes · ${day.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`;
     $('team-prev').disabled = keys.indexOf(teamWeek) <= 0;
     $('team-next').disabled = keys.indexOf(teamWeek) >= keys.length - 1;
@@ -272,8 +331,10 @@ const Planning = (() => {
     const pct = (m) => `${((m - from) / span) * 100}%`;
     const total = rows.reduce((t, r) => t + r.work.reduce((a, s) => a + s.end - s.start, 0) + (r.cp || 0), 0);
     const meRow = rows.find((r) => r.isMe);
+    const working = rows.filter((r) => r.work.length).length;
+    const onLeave = rows.length - working;
     $('team-sum').replaceChildren(
-      el('span', '', `${rows.length} au travail · ${fmtDur(total)}`),
+      el('span', '', `${working} au travail${onLeave ? ` · ${onLeave} en congé` : ''} · ${fmtDur(total)}`),
       el('b', meRow ? 'me-sum' : 'me-sum off', meRow
         ? (meRow.work.length ? `Toi : ${meRow.work.map((s) => `${fmtMin(s.start)}–${fmtMin(s.end)}`).join(' · ')}` : `Toi : congé ${fmtDur(meRow.cp)}`)
         : 'Toi : repos'),
@@ -294,11 +355,13 @@ const Planning = (() => {
     const body = [head];
     for (const r of rows) {
       const row = el('div', 'tl-row' + (r.isMe ? ' me' : ''));
-      const nameCell = el('div', 'tl-name', r.name);
+      const nameCell = el('div', 'tl-name');
       if (r.swap) {
-        nameCell.append(el('em', 'tl-swap', `⇄ ${firstName(r.swap)}`));
+        nameCell.append(el('em', 'tl-swap', '⇄ '));
         nameCell.title = `Échange avec ${r.swap}`;
+        row.classList.add('swapped');
       }
+      nameCell.append(document.createTextNode(r.name));
       row.append(nameCell);
       const track = el('div', 'tl-track');
       for (let m = Math.ceil(from / step) * step; m <= to; m += step) {
@@ -364,6 +427,7 @@ const Planning = (() => {
     if (data !== fresh) { weekStart = null; teamWeek = null; }
     data = fresh;
     data.entries = validEntries(data.entries);
+    data.teams = cleanTeams(data.teams);
     const empty = !data.entries.length && !teamKeys().length;
     $('plan-empty').hidden = !empty;
     $('plan-me').hidden = empty;
@@ -430,10 +494,24 @@ const Planning = (() => {
     return out.entries.length || Object.keys(teams).length ? out : null;
   }
 
+  const dayNum = (d) => (d.getDate() === 1 ? '1er' : String(d.getDate()));
+  const monthName = (d) => d.toLocaleDateString('fr-FR', { month: 'long' });
+
+  // « 12 – 18 octobre » ou « 26 oct. – 1er nov. »
+  function rangeLabel(start) {
+    const end = addDays(start, 6);
+    if (start.getMonth() === end.getMonth()) return `${dayNum(start)} – ${dayNum(end)} ${monthName(end)}`;
+    const short = (d) => d.toLocaleDateString('fr-FR', { month: 'short' });
+    return `${dayNum(start)} ${short(start)} – ${dayNum(end)} ${short(end)}`;
+  }
+
+  // « du 12 au 18 octobre » ou « du 26 octobre au 1er novembre »
   function weekLabel(monday) {
     const start = parseDate(monday);
     const end = addDays(start, 6);
-    return `du ${start.getDate()} au ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
+    return start.getMonth() === end.getMonth()
+      ? `du ${dayNum(start)} au ${dayNum(end)} ${monthName(end)}`
+      : `du ${dayNum(start)} ${monthName(start)} au ${dayNum(end)} ${monthName(end)}`;
   }
 
   /* ----- Résumé pour la page d'accueil ----- */
@@ -441,7 +519,7 @@ const Planning = (() => {
   function dashboard(planning, now = new Date()) {
     const p = planning || {};
     const entries = validEntries(p.entries);
-    const teams = p.teams || {};
+    const teams = cleanTeams(p.teams);
     const shifts = entries
       .filter((e) => !e.off && e.start && e.end)
       .map((e) => ({ e, at: startAt(e), dur: duration(e) }))
@@ -512,6 +590,12 @@ const Planning = (() => {
     };
   }
 
+  // Vue personnelle sur la semaine en cours (depuis l'accueil).
+  function openMine() {
+    weekStart = mondayOf(new Date());
+    if (data) { renderWeek(); setMode('me'); }
+  }
+
   // Ouvre la vue Équipe sur aujourd'hui (depuis l'accueil).
   function openTeamToday() {
     const k = teamKeys();
@@ -523,7 +607,7 @@ const Planning = (() => {
   }
 
   return {
-    show, decode, merge, fromTeam, currentWeek, removeWeek, weekLabel, dashboard, openTeamToday,
+    show, decode, merge, fromTeam, cleanTeam, currentWeek, removeWeek, weekLabel, dashboard, openTeamToday, openMine,
     fmtDur, fmtTime, firstName,
   };
 })();

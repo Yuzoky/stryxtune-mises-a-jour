@@ -43,9 +43,11 @@ def load_pubkey(path: pathlib.Path) -> bytes:
     code = path.read_text(encoding="utf-8").strip()
     if not code.upper().startswith("STRYXKEY:"):
         sys.exit(f"{path} : code de liaison invalide (doit commencer par STRYXKEY:)")
-    raw = unb64u(code.split(":", 1)[1])
-    if len(raw) != 65 or raw[0] != 4:
-        sys.exit(f"{path} : clé publique P-256 invalide")
+    try:
+        raw = unb64u("".join(code.split(":", 1)[1].split()))
+        ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw)
+    except Exception:
+        sys.exit(f"{path} : clé publique P-256 invalide (code coupé ou abîmé ?)")
     return raw
 
 
@@ -77,7 +79,12 @@ def main() -> None:
     ap.add_argument("--out", default=str(HERE / "planning.json"))
     args = ap.parse_args()
 
-    payload = json.loads(pathlib.Path(args.payload).read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(pathlib.Path(args.payload).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        sys.exit(f"payload illisible : {e}")
+    if not isinstance(payload, dict):
+        sys.exit("payload : un objet JSON est attendu, ex. {\"plans\": [...]}")
     now = datetime.datetime.now(datetime.timezone.utc)
     payload["app"] = "stryxhub-plan"
     payload["id"] = now.strftime("%Y%m%dT%H%M%SZ-") + secrets.token_hex(3)

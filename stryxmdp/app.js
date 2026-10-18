@@ -188,7 +188,7 @@ function safeUrl(u) {
 const native = window.StryxAndroid || null;
 
 async function copy(text, label) {
-  if (!text) return;
+  if (!text) { toast(`Pas de ${label.toLowerCase()} enregistré`); return; }
   if (native) {
     native.copy(text);
     toast(`${label} copié · effacé dans 30 s`);
@@ -206,6 +206,25 @@ async function copy(text, label) {
     toast('Copie impossible sur cet appareil');
   }
 }
+
+// Copie d'un texte non secret (code de liaison) : pas d'effacement automatique.
+function copyPlain(text, label) {
+  if (native && native.copyPlain) { native.copyPlain(text); toast(`${label} copié`); return; }
+  if (native) { native.copy(text); toast(`${label} copié`); return; }
+  navigator.clipboard.writeText(text).then(() => toast(`${label} copié`), () => toast('Copie impossible sur cet appareil'));
+}
+
+// Empêche une double validation (double appui sur OK / double clic).
+function once(fn) {
+  let busy = false;
+  return async (...args) => {
+    if (busy) return;
+    busy = true;
+    try { await fn(...args); } finally { setTimeout(() => { busy = false; }, 400); }
+  };
+}
+
+const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /* ---------- Fond étoilé ---------- */
 
@@ -289,13 +308,23 @@ function lock() {
   state.syncStatus = 'idle';
   clearTimeout(state.lockTimer);
   closeAllSheets();
-  $('list').replaceChildren();
+  wipeScreen();
   $('vault').hidden = true;
   $('lock').hidden = false;
-  $('master').value = '';
-  $('master2').value = '';
   $('lock-error').textContent = '';
   lockMode();
+}
+
+// Retire de l'écran tout ce qui est secret (mots de passe, planning, champs remplis).
+function wipeScreen() {
+  bio.pendingPw = null;
+  csvPending = [];
+  ['list', 'days', 'timeline', 'rest-list', 'day-strip', 'team-sum', 'plan-next', 'csv-preview', 'home-next', 'home-bars'].forEach((id) => $(id).replaceChildren());
+  ['v-pass', 'v-user', 'v-title', 'v-notes', 'v-url', 'gen-out', 'sync-code', 'home-team-sub'].forEach((id) => { $(id).textContent = ''; });
+  document.querySelectorAll('input[type=password], input[type=text], input[type=search], textarea, #f-title, #f-user, #f-url').forEach((i) => { i.value = ''; });
+  document.querySelectorAll('[data-toggle]').forEach((b) => { $(b.dataset.toggle).type = 'password'; });
+  $('f-pass').type = 'password';
+  state.query = '';
 }
 
 async function onUnlock(e, bioPassword) {
@@ -335,16 +364,6 @@ async function onUnlock(e, bioPassword) {
         toast('Sauvegarde restaurée');
       }
     }
-    if (!viaBio) bio.offer(pw);
-    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-    $('master').value = '';
-    $('master2').value = '';
-    $('lock').hidden = true;
-    $('vault').hidden = false;
-    render();
-    showPage(PAGES.includes(settings.page) ? settings.page : 'home', { instant: true });
-    armAutolock();
-    sync.fetch(false);
   } catch (ex) {
     if (viaBio) {
       // Le mot de passe maître a changé depuis l'activation : on repart du mot de passe.
@@ -357,10 +376,28 @@ async function onUnlock(e, bioPassword) {
     $('lock-form').classList.remove('shake');
     void $('lock-form').offsetWidth;
     $('lock-form').classList.add('shake');
+    return;
   } finally {
     btn.disabled = false;
     btn.classList.remove('loading');
   }
+  // Coffre ouvert : la suite ne peut plus être prise pour un mauvais mot de passe.
+  $('master').value = '';
+  $('master2').value = '';
+  $('lock').hidden = true;
+  $('vault').hidden = false;
+  try {
+    if (!viaBio) bio.offer(pw);
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    render();
+    showPage(PAGES.includes(settings.page) ? settings.page : 'home', { instant: true });
+  } catch (ex) {
+    console.error(ex);
+    try { showPage('pw', { instant: true }); } catch { /* affichage minimal */ }
+    toast('Un affichage a échoué, tes données sont intactes');
+  }
+  armAutolock();
+  sync.fetch(false);
 }
 
 /* ---------- Verrouillage automatique ---------- */
@@ -385,7 +422,10 @@ document.addEventListener('visibilitychange', () => {
   }
   if (state.session) {
     sync.fetch(false);
+    updateHeader();
     if (state.page === 'home') renderHome();
+  } else if (!$('lock').hidden) {
+    bio.prompt();
   }
 });
 
@@ -393,7 +433,7 @@ document.addEventListener('visibilitychange', () => {
 
 function pageTitle(name) {
   const dash = Planning.dashboard(state.planning);
-  const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const today = capitalize(new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }));
   switch (name) {
     case 'home': {
       const h = new Date().getHours();
@@ -482,7 +522,8 @@ function renderHome() {
       icon('link', 'ic hero-ic'),
       el('small', 'kicker', 'Planning'),
       el('span', 'hero-time', 'Ajoute ton planning'),
-      el('span', 'hero-day', state.sync ? 'En attente du premier planning de Claude.' : 'Connecte le planning automatique : Claude l\'enverra directement ici.'),
+      el('span', 'hero-day', !sync.supported() ? 'Colle un code planning envoyé par Claude (page Planning).'
+        : state.sync ? 'En attente du premier planning de Claude.' : 'Connecte le planning automatique : Claude l\'enverra directement ici.'),
     );
   } else {
     hero.replaceChildren(
@@ -551,6 +592,8 @@ function renderSyncLine() {
   const st = state.syncStatus;
   if (st === 'loading') { text = 'Recherche d\'un nouveau planning…'; dot.classList.add('wait'); }
   else if (st === 'error') { text = 'Hors ligne · dernier planning gardé'; dot.classList.add('err'); }
+  else if (st === 'bad') { text = 'Planning reçu illisible · dernier planning gardé'; dot.classList.add('err'); }
+  else if (st === 'waiting') { text = 'En attente d\'un planning pour ce téléphone'; dot.classList.add('wait'); }
   else if (state.sync.lastAt) { text = `Planning synchronisé ${timeAgo(state.sync.lastAt)}`; dot.classList.add('ok'); line.classList.add('ok'); }
   else { text = 'Connecté · en attente du premier planning de Claude'; dot.classList.add('wait'); }
   line.replaceChildren(dot, el('span', '', text));
@@ -558,10 +601,14 @@ function renderSyncLine() {
 
 $('home-next').onclick = () => {
   const dash = Planning.dashboard(state.planning);
-  if (dash.empty && native && native.fetchPlanning && !state.sync) { sync.openSheet(); return; }
+  if (dash.empty && sync.supported() && !state.sync) { sync.openSheet(); return; }
   showPage('plan');
+  Planning.openMine();
 };
-$('home-week').onclick = () => showPage('plan');
+$('home-week').onclick = () => {
+  showPage('plan');
+  Planning.openMine();
+};
 $('home-team').onclick = () => {
   showPage('plan');
   Planning.openTeamToday();
@@ -681,15 +728,18 @@ function openPlanCode() {
 $('plan-import').onclick = openPlanCode;
 $('s-plancode').onclick = openPlanCode;
 
-$('plan-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+$('plan-form').addEventListener('submit', (e) => { e.preventDefault(); addPlanCode(); });
+const addPlanCode = once(async () => {
+  if (!$('plan-sheet').classList.contains('open')) return;
   let add;
   try {
     add = await Planning.decode($('plan-code').value);
   } catch (ex) {
-    $('plan-error').textContent = ex && ex.message === 'inflate'
-      ? 'Ce téléphone ne lit pas les codes compressés : demande à Claude le « code long ».'
-      : 'Code incomplet ou abîmé : recopie tout le code envoyé par Claude, du début (STRYXPLAN) jusqu\'à la fin.';
+    const why = ex && ex.message;
+    $('plan-error').textContent = why === 'empty' ? 'Colle d\'abord le code (appui long dans la case › Coller).'
+      : why === 'linkcode' ? 'Ça, c\'est ton code de liaison (STRYXKEY) : envoie-le à Claude dans la conversation, pas ici.'
+        : why === 'inflate' ? 'Ce téléphone ne lit pas les codes compressés : demande à Claude le « code long ».'
+          : 'Code incomplet ou abîmé : recopie tout le code envoyé par Claude, du début (STRYXPLAN) jusqu\'à la fin.';
     return;
   }
   state.planning = Planning.merge(state.planning, add);
@@ -718,7 +768,7 @@ $('plan-clear').onclick = async () => {
 };
 
 function afterPlanningChange() {
-  if (state.page === 'plan') Planning.show(state.planning);
+  if (state.page === 'plan') { Planning.show(state.planning); updatePlanSyncButton(); }
   if (state.page === 'home') renderHome();
   updateHeader();
 }
@@ -739,16 +789,20 @@ const sync = {
   },
 
   // Applique un planning reçu : semaines retirées, puis semaines ajoutées ou remplacées.
-  async apply(payload) {
-    if (state.sync.lastId === payload.id) return false;
+  // Les identifiants d'envoi commencent par la date (AAAAMMJJTHHMMSSZ) : un envoi plus ancien
+  // que le dernier appliqué n'est jamais réappliqué. Un « Actualiser » peut rejouer le même envoi.
+  async apply(payload, manual) {
+    const last = state.sync.lastId || '';
+    if (payload.id < last || (payload.id === last && !manual)) return false;
     let plan = state.planning;
     for (const wk of Array.isArray(payload.removeWeeks) ? payload.removeWeeks : []) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(wk)) plan = Planning.removeWeek(plan, wk);
     }
     for (const obj of Array.isArray(payload.plans) ? payload.plans : []) {
-      if (obj && /^\d{4}-\d{2}-\d{2}$/.test(obj.week || '') && Array.isArray(obj.people)) {
+      if (!obj || !/^\d{4}-\d{2}-\d{2}$/.test(obj.week || '') || !Array.isArray(obj.people)) continue;
+      try {
         plan = Planning.merge(plan, Planning.fromTeam(obj));
-      }
+      } catch { /* semaine mal formée : ignorée */ }
     }
     state.planning = plan;
     state.sync.lastId = payload.id;
@@ -768,8 +822,23 @@ const sync = {
       return;
     }
     try {
-      const payload = await PlanSync.open(JSON.parse(text), state.sync);
-      const changed = await sync.apply(payload);
+      // Nouvelle version native : tableau de toutes les copies trouvées ; ancienne : une seule.
+      let bodies;
+      try { bodies = JSON.parse(text); } catch { bodies = null; }
+      if (!Array.isArray(bodies)) bodies = [text];
+      let best = null;
+      let otherKey = false;
+      for (const body of bodies) {
+        try {
+          const env = typeof body === 'string' ? JSON.parse(body) : body;
+          const payload = await PlanSync.open(env, state.sync);
+          if (!best || payload.id > best.id) best = payload;
+        } catch (e) {
+          if (e && e.message === 'other-key') otherKey = true;
+        }
+      }
+      if (!best) throw new Error(otherKey ? 'other-key' : 'unreadable');
+      const changed = await sync.apply(best, manual);
       state.syncStatus = 'ok';
       if (!state.sync.lastAt) state.sync.lastAt = Date.now();
       if (changed) {
@@ -780,8 +849,8 @@ const sync = {
       }
     } catch (ex) {
       // Fichier chiffré pour une autre liaison (ancien téléphone) : on attend le prochain envoi.
-      state.syncStatus = ex && ex.message === 'other-key' ? 'waiting' : 'error';
-      if (manual) toast(state.syncStatus === 'waiting' ? 'En attente d\'un planning pour ce téléphone' : 'Planning reçu illisible');
+      state.syncStatus = ex && ex.message === 'other-key' ? 'waiting' : 'bad';
+      if (manual) toast(state.syncStatus === 'waiting' ? 'En attente d\'un planning pour ce téléphone' : 'Planning reçu illisible : demande à Claude de le renvoyer');
     }
     sync.refreshUi();
   },
@@ -792,7 +861,8 @@ const sync = {
     switch (state.syncStatus) {
       case 'loading': return 'Recherche d\'un nouveau planning…';
       case 'error': return 'Hors ligne pour le moment';
-      case 'waiting':
+      case 'bad': return 'Planning reçu illisible';
+      case 'waiting': return 'En attente d\'un planning pour ce téléphone';
       case 'none': return state.sync.lastAt ? `À jour · ${timeAgo(state.sync.lastAt)}` : 'Connecté · en attente du premier planning';
       default: return state.sync.lastAt ? `Synchronisé ${timeAgo(state.sync.lastAt)}` : 'Connecté · en attente du premier planning';
     }
@@ -813,7 +883,8 @@ const sync = {
     $('sync-error').textContent = '';
     if (on) {
       $('sync-code').textContent = state.sync.code;
-      const dot = el('i', 'dot' + (state.syncStatus === 'error' ? ' err' : state.sync.lastAt ? ' ok' : ' wait'));
+      const st = state.syncStatus;
+      const dot = el('i', 'dot' + (st === 'error' || st === 'bad' ? ' err' : st === 'waiting' || !state.sync.lastAt ? ' wait' : ' ok'));
       $('sync-status').replaceChildren(dot, el('span', '', `${sync.statusText()} · clé ${state.sync.kid}`));
     }
   },
@@ -829,6 +900,10 @@ const sync = {
 function updatePlanSyncButton() {
   const btn = $('plan-sync-btn');
   btn.hidden = !sync.supported();
+  $('plan-empty-txt').textContent = !sync.supported()
+    ? 'Envoie une photo de ton planning à Claude : il te donnera un code à coller ici (« Coller un code »).'
+    : state.sync ? 'Connecté : le prochain planning envoyé par Claude arrivera ici automatiquement.'
+      : 'Connecte le planning automatique une fois : Claude l\'enverra ensuite directement ici.';
   $('plan-sync-label').textContent = state.sync ? (state.syncStatus === 'loading' ? 'Recherche…' : 'Actualiser') : 'Planning automatique';
 }
 
@@ -843,14 +918,19 @@ $('sync-link').onclick = async () => {
     await persist();
     sync.refreshSheet();
     sync.refreshUi();
-    copy(state.sync.code, 'Code de liaison');
+    copyPlain(state.sync.code, 'Code de liaison');
   } catch {
     state.sync = null;
     $('sync-error').textContent = 'Impossible de créer la clé sur ce téléphone.';
   }
 };
-$('sync-copy').onclick = () => copy(state.sync && state.sync.code, 'Code de liaison');
-$('sync-code').onclick = () => copy(state.sync && state.sync.code, 'Code de liaison');
+$('sync-copy').onclick = () => state.sync && copyPlain(state.sync.code, 'Code de liaison');
+$('sync-code').onclick = () => state.sync && copyPlain(state.sync.code, 'Code de liaison');
+$('sync-share').onclick = () => {
+  if (!state.sync) return;
+  if (native && native.shareText) native.shareText(state.sync.code);
+  else copyPlain(state.sync.code, 'Code de liaison');
+};
 $('sync-refresh').onclick = () => sync.fetch(true);
 $('sync-unlink').onclick = async () => {
   if (!confirm('Déconnecter le planning automatique ?\n\nTon planning actuel est gardé. Pour te reconnecter, il faudra renvoyer un nouveau code à Claude.')) return;
@@ -889,8 +969,9 @@ function openEdit(id) {
 
 $('f-pass').addEventListener('input', () => setStrength($('strength-f'), $('f-pass').value));
 
-$('edit-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+$('edit-form').addEventListener('submit', (e) => { e.preventDefault(); saveEdit(); });
+const saveEdit = once(async () => {
+  if (!$('edit-sheet').classList.contains('open')) return;
   const now = Date.now();
   const data = {
     title: $('f-title').value.trim(),
@@ -901,10 +982,14 @@ $('edit-form').addEventListener('submit', async (e) => {
     notes: $('f-notes').value.trim(),
     updated: now,
   };
-  if (!data.title) return;
+  if (!data.title) { toast('Donne un nom à cet identifiant'); $('f-title').focus(); return; }
   const existing = state.items.find((x) => x.id === state.current);
   if (existing) Object.assign(existing, data);
-  else state.items.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(now) + Math.random(), created: now, ...data });
+  else {
+    const id = crypto.randomUUID ? crypto.randomUUID() : String(now) + Math.random();
+    state.items.push({ id, created: now, ...data });
+    state.current = id; // une validation tardive devient une modification, pas un doublon
+  }
   await persist();
   closeSheet('edit-sheet');
   render();
@@ -935,6 +1020,14 @@ function regen() {
   setStrength($('strength-g'), pw);
 }
 ['gen-len', 'g-up', 'g-low', 'g-num', 'g-sym'].forEach((id) => $(id).addEventListener('input', regen));
+// Au moins une famille de caractères reste cochée.
+['g-up', 'g-low', 'g-num', 'g-sym'].forEach((id) => $(id).addEventListener('change', (e) => {
+  if (!['g-up', 'g-low', 'g-num', 'g-sym'].some((x) => $(x).checked)) {
+    e.target.checked = true;
+    toast('Garde au moins un type de caractères');
+    regen();
+  }
+}));
 $('gen-again').onclick = regen;
 // Deux usages : depuis le formulaire (« Utiliser ») ou depuis l'appli (« Enregistrer »).
 let genFromForm = false;
@@ -980,7 +1073,8 @@ $('s-autolock').onchange = () => {
 $('s-export').onclick = () => {
   const blob = storage.get(STORE_KEY);
   if (!blob) return;
-  const name = `stryxhub-${new Date().toISOString().slice(0, 10)}.json`;
+  const d = new Date();
+  const name = `stryxhub-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.json`;
   if (native) {
     native.saveFile(name, JSON.stringify(blob));
     return;
@@ -1023,12 +1117,15 @@ $('csv-in').onchange = async () => {
   csvReset();
   try {
     const { items, skipped } = CsvImport.read(await f.text());
-    const fresh = items.filter((it, i) => !state.items.some((x) => sameEntry(x, it)) && items.findIndex((y) => sameEntry(y, it)) === i);
-    const dupes = items.length - fresh.length;
+    const unique = items.filter((it, i) => items.findIndex((y) => sameEntry(y, it)) === i);
+    const fresh = unique.filter((it) => !state.items.some((x) => sameEntry(x, it)));
+    const dupes = unique.length - fresh.length;
+    const inFile = items.length - unique.length;
     csvPending = fresh;
     $('csv-n').textContent = fresh.length ? `${plural(fresh.length, 'identifiant')} à importer` : 'Rien de nouveau à importer';
     $('csv-detail').textContent = [
       dupes ? `${dupes} déjà dans le coffre` : '',
+      inFile ? `${plural(inFile, 'doublon')} dans le fichier` : '',
       skipped ? `${plural(skipped, 'ligne')} vide${skipped > 1 ? 's' : ''} ignorée${skipped > 1 ? 's' : ''}` : '',
     ].filter(Boolean).join(' · ');
     $('csv-preview').replaceChildren(...fresh.slice(0, 50).map((it) => {
@@ -1048,7 +1145,7 @@ $('csv-in').onchange = async () => {
       : 'Impossible de lire ce fichier.';
   }
 };
-$('csv-go').onclick = async () => {
+$('csv-go').onclick = once(async () => {
   if (!csvPending.length || !state.session) return;
   const now = Date.now();
   csvPending.forEach((it, i) => {
@@ -1061,7 +1158,7 @@ $('csv-go').onclick = async () => {
   state.filter = 'all';
   render();
   toast(`${plural(n, 'identifiant')} importé${n > 1 ? 's' : ''} ✓ · supprime le fichier CSV`);
-};
+});
 
 /* ---------- Sauvegardes ---------- */
 
@@ -1097,8 +1194,9 @@ $('s-change').onclick = () => {
   openSheet('pw-sheet');
 };
 $('pw-new').addEventListener('input', () => setStrength($('strength-pw'), $('pw-new').value));
-$('pw-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+$('pw-form').addEventListener('submit', (e) => { e.preventDefault(); changeMaster(); });
+const changeMaster = once(async () => {
+  if (!$('pw-sheet').classList.contains('open')) return;
   const err = $('pw-error');
   if ($('pw-new').value !== $('pw-new2').value) { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
   try {
@@ -1124,6 +1222,9 @@ $('s-wipe').onclick = () => {
   if (!confirm('Dernière confirmation : cette action est irréversible.')) return;
   storage.remove(STORE_KEY);
   bio.disable();
+  delete settings.page;
+  delete settings.bioAsked;
+  saveSettings();
   lock();
   toast('Coffre effacé');
 };
@@ -1158,7 +1259,7 @@ if (!window.crypto || !crypto.subtle) {
 
 // Bouton « retour » d'Android : ferme la fenêtre ouverte, puis revient à l'accueil, puis quitte.
 window.stryxBack = () => {
-  const open = [...document.querySelectorAll('.sheet')].filter((s) => s.classList.contains('open')).pop();
+  const open = [...document.querySelectorAll('.sheet')].filter((s) => !s.hidden).pop();
   if (open) {
     closeSheet(open.id);
     return true;
@@ -1224,8 +1325,8 @@ $('s-bio').onclick = () => {
     bio.openSheet(null);
   }
 };
-$('bio-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+$('bio-form').addEventListener('submit', (e) => { e.preventDefault(); enableBio(); });
+const enableBio = once(async () => {
   const pw = bio.pendingPw || $('bio-pw').value;
   if (!bio.pendingPw) {
     try {
@@ -1242,10 +1343,14 @@ $('bio-form').addEventListener('submit', async (e) => {
 $('bio-sheet').addEventListener('click', (e) => {
   if (e.target === $('bio-sheet') || (e.target.closest && e.target.closest('[data-close]'))) bio.pendingPw = null;
 });
+// Fermée autrement (bouton retour) : le mot de passe gardé pour l'activation est oublié.
+new MutationObserver(() => { if ($('bio-sheet').hidden) bio.pendingPw = null; })
+  .observe($('bio-sheet'), { attributes: true, attributeFilter: ['hidden'] });
 
 // Réponses du code Android : action = 'enable' | 'unlock', ok = vrai/faux.
 window.stryxBio = (action, ok, payload) => {
   if (action === 'unlock') {
+    if (ok && (state.pendingImport || state.session)) return; // restauration en cours ou déjà ouvert
     if (ok) onUnlock(null, payload);
     else if (payload === 'invalidated') {
       lockMode();
@@ -1325,7 +1430,7 @@ const updates = {
 };
 
 $('s-update').onclick = () => updates.check(true);
-$('update-close').onclick = () => { $('update-bar').hidden = true; };
+$('update-close').onclick = () => { $('update-bar').hidden = true; document.body.classList.remove('has-update'); };
 $('update-go').onclick = () => {
   $('update-go').disabled = true;
   $('update-go').textContent = 'Téléchargement…';
@@ -1339,6 +1444,8 @@ window.stryxUpdate = (event, payload) => {
       $('update-title').textContent = 'Mise à jour disponible';
       $('update-sub').textContent = `Stryx Hub ${payload} · tes données sont conservées`;
       $('update-bar').hidden = false;
+      document.body.classList.add('has-update');
+      if (updates.manual) $('s-update-sub').textContent = `Version ${payload} disponible · voir le bandeau en haut`;
       updates.reset();
       break;
     case 'none':
@@ -1399,7 +1506,11 @@ $('install-btn').onclick = async () => {
 };
 
 // Rafraîchit l'accueil chaque minute (compte à rebours du prochain service).
-setInterval(() => { if (state.session && state.page === 'home' && !document.hidden) renderHome(); }, 60000);
+setInterval(() => {
+  if (!state.session || document.hidden) return;
+  updateHeader();
+  if (state.page === 'home') renderHome();
+}, 60000);
 
 starfield();
 lockMode();

@@ -1,5 +1,5 @@
 // Cache hors ligne : l'application fonctionne sans connexion une fois installée.
-const CACHE = 'stryxhub-v11';
+const CACHE = 'stryxhub-v12';
 const FILES = [
   './', 'index.html', 'style.css', 'crypto.js', 'importcsv.js', 'sync.js', 'planning.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',

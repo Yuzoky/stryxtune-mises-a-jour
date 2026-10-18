@@ -3,6 +3,8 @@ package com.stryx.mdp;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.json.JSONArray;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -12,7 +14,9 @@ import java.nio.charset.StandardCharsets;
 /**
  * Récupère le planning chiffré publié par Claude (sync/planning.json du dépôt).
  * Les adresses sont fixes : la page web ne peut pas s'en servir pour joindre un autre site.
- * Le déchiffrement se fait dans l'appli web, avec la clé privée gardée dans le coffre.
+ * Toutes les copies trouvées sont renvoyées (tableau JSON) : l'appli web les déchiffre avec la
+ * clé privée gardée dans le coffre et garde la plus récente, une ancienne copie ne masque rien.
+ * Réponse : ok=true + tableau JSON ; sinon ok=false + "none" (aucun fichier publié) ou un message.
  */
 final class PlanningSync {
 
@@ -39,21 +43,22 @@ final class PlanningSync {
         if (busy) return;
         busy = true;
         new Thread(() -> {
-            String text = null;
-            String error = "Planning automatique indisponible (connexion ?)";
+            JSONArray found = new JSONArray();
+            int missing = 0;
             // Paramètre anti-cache, changé chaque minute.
             long bust = System.currentTimeMillis() / 60_000;
             for (String url : URLS) {
                 try {
-                    text = read(url + "?t=" + bust);
-                    if (text != null) break;
-                    error = "none";
+                    String text = read(url + "?t=" + bust);
+                    if (text == null) missing++;
+                    else found.put(text);
                 } catch (Exception e) {
-                    // On essaie l'adresse suivante.
+                    // Adresse injoignable : on essaie les suivantes.
                 }
             }
-            final boolean ok = text != null;
-            final String payload = ok ? text : error;
+            final boolean ok = found.length() > 0;
+            final String payload = ok ? found.toString()
+                    : missing == URLS.length ? "none" : "Planning automatique indisponible (connexion ?)";
             busy = false;
             main.post(() -> callback.result(ok, payload));
         }, "stryxhub-plan-sync").start();
