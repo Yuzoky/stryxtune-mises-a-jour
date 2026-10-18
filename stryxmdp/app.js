@@ -3,25 +3,32 @@
 const STORE_KEY = 'stryxmdp';
 const SETTINGS_KEY = 'stryxmdp-settings';
 const CLIPBOARD_CLEAR_MS = 30000;
+const SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const CATEGORIES = [
-  { id: 'jeux', label: 'Jeux', icon: '🎮' },
-  { id: 'social', label: 'Réseaux', icon: '💬' },
-  { id: 'mail', label: 'E-mail', icon: '✉' },
-  { id: 'banque', label: 'Banque', icon: '💳' },
-  { id: 'travail', label: 'Travail', icon: '💼' },
-  { id: 'autre', label: 'Autre', icon: '◆' },
+  { id: 'jeux', label: 'Jeux' },
+  { id: 'social', label: 'Réseaux' },
+  { id: 'mail', label: 'E-mail' },
+  { id: 'banque', label: 'Banque' },
+  { id: 'travail', label: 'Travail' },
+  { id: 'autre', label: 'Autre' },
 ];
+const PAGES = ['home', 'pw', 'plan', 'settings'];
 
 const $ = (id) => document.getElementById(id);
 const state = {
   session: null,      // { key, salt, iterations } — uniquement en mémoire
   items: [],
+  planning: null,
+  sync: null,         // liaison du planning automatique (clé privée incluse), stockée dans le coffre
+  page: 'home',
   filter: 'all',
   query: '',
   current: null,      // identifiant ouvert dans la feuille de détail
   pendingImport: null,
   hiddenAt: 0,
   lockTimer: 0,
+  syncStatus: 'idle', // idle | loading | ok | waiting | none | error | unavailable
+  syncAsked: 0,
 };
 
 /* ---------- Stockage ---------- */
@@ -33,9 +40,10 @@ const storage = {
 };
 
 const settings = Object.assign({ autolock: 300 }, storage.get(SETTINGS_KEY));
+const saveSettings = () => storage.set(SETTINGS_KEY, settings);
 
 async function persist() {
-  const blob = await VaultCrypto.encrypt(state.session, { items: state.items, planning: state.planning });
+  const blob = await VaultCrypto.encrypt(state.session, { items: state.items, planning: state.planning, sync: state.sync });
   storage.set(STORE_KEY, blob);
 }
 
@@ -47,7 +55,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
 function openSheet(id) {
@@ -58,7 +66,7 @@ function openSheet(id) {
 function closeSheet(id) {
   const s = $(id);
   s.classList.remove('open');
-  setTimeout(() => { s.hidden = true; }, 220);
+  setTimeout(() => { if (!s.classList.contains('open')) s.hidden = true; }, 240);
 }
 function closeAllSheets() {
   document.querySelectorAll('.sheet').forEach((s) => { s.classList.remove('open'); s.hidden = true; });
@@ -68,6 +76,37 @@ function setStrength(el, pw) {
   const score = VaultCrypto.strength(pw);
   el.dataset.score = score;
   el.title = ['', 'Faible', 'Moyen', 'Bon', 'Excellent'][score];
+}
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+// Icône du sprite SVG (<svg class="ic"><use href="#i-…"/></svg>).
+function icon(name, cls = 'ic') {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', cls);
+  const use = document.createElementNS(ns, 'use');
+  use.setAttribute('href', `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+
+const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
+const weakLabel = (n) => (n > 1 ? `${n} mots de passe faibles` : `${n} mot de passe faible`);
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const min = Math.round((Date.now() - ts) / 60000);
+  if (min < 1) return 'à l\'instant';
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  return `le ${new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`;
 }
 
 /* ---------- Logos des sites ---------- */
@@ -102,18 +141,20 @@ function siteDomain(it) {
   }
   const title = (it.title || '').trim().toLowerCase();
   if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(title)) return title.replace(/^www\./, '');
-  const key = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  const key = title.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
   return KNOWN_SITES[key] || KNOWN_SITES[key.split(/\d/)[0]] || '';
 }
 
-// Remplit une pastille ronde : logo du site si disponible, sinon l'initiale.
+// Sites sans logo (pour ne pas les redemander pendant la session).
+const iconFailed = new Set();
+
+// Remplit une pastille : logo du site si disponible, sinon l'initiale.
 function fillAvatar(av, it) {
   av.replaceChildren();
   av.classList.remove('has-icon');
-  av.textContent = (it.title[0] || '?').toUpperCase();
+  av.textContent = ((it.title || '?')[0] || '?').toUpperCase();
   const domain = settings.icons !== false ? siteDomain(it) : '';
-  if (!domain) return;
-  if (iconFailed.has(domain)) return;
+  if (!domain || iconFailed.has(domain)) return;
   const img = new Image();
   img.alt = '';
   img.decoding = 'async';
@@ -131,8 +172,6 @@ function fillAvatar(av, it) {
   img.src = `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`;
   if (img.complete && img.naturalWidth >= 8) show(); // déjà en cache : pas de clignotement
 }
-// Sites sans logo (pour ne pas les redemander pendant la session).
-const iconFailed = new Set();
 
 const catOf = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 
@@ -175,39 +214,50 @@ function starfield() {
   const ctx = c.getContext('2d');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let stars = [];
+  let running = false;
   function resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     c.width = innerWidth * dpr;
     c.height = innerHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const n = Math.round((innerWidth * innerHeight) / 5000);
+    const n = Math.round((innerWidth * innerHeight) / 5200);
     stars = Array.from({ length: n }, () => ({
       x: Math.random() * innerWidth,
       y: Math.random() * innerHeight,
       r: Math.random() * 1.2 + 0.2,
-      a: Math.random(),
+      a: Math.random() * 6,
       s: Math.random() * 0.015 + 0.003,
       v: Math.random() * 0.08 + 0.02,
     }));
   }
-  function frame() {
+  function draw() {
     ctx.clearRect(0, 0, innerWidth, innerHeight);
+    ctx.fillStyle = '#fff';
     for (const st of stars) {
       st.a += st.s;
       st.y -= st.v;
       if (st.y < 0) st.y = innerHeight;
       ctx.globalAlpha = 0.25 + Math.abs(Math.sin(st.a)) * 0.75;
-      ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+  function frame() {
+    draw();
     if (!reduce && !document.hidden) requestAnimationFrame(frame);
+    else running = false;
+  }
+  function start() {
+    if (reduce) { draw(); return; }
+    if (running) return;
+    running = true;
+    requestAnimationFrame(frame);
   }
   resize();
-  frame();
-  addEventListener('resize', () => { resize(); if (reduce) frame(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !reduce) frame(); });
+  start();
+  addEventListener('resize', () => { resize(); if (reduce) draw(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) start(); });
 }
 
 /* ---------- Écran de verrouillage ---------- */
@@ -220,9 +270,9 @@ function lockMode() {
   $('strength-master').hidden = !creating;
   $('lock-btn').textContent = state.pendingImport ? 'Restaurer' : creating ? 'Créer mon coffre' : 'Déverrouiller';
   $('lock-hint').textContent = state.pendingImport
-    ? 'Entrez le mot de passe maître de la sauvegarde.'
+    ? 'Entre le mot de passe maître de la sauvegarde.'
     : creating
-      ? 'Choisissez un mot de passe maître. Il protège tout le coffre et ne peut pas être récupéré : ne l\'oubliez pas.'
+      ? 'Choisis un mot de passe maître. Il protège tout le coffre et ne peut pas être récupéré : ne l\'oublie pas.'
       : '';
   $('master').autocomplete = creating ? 'new-password' : 'current-password';
   $('restore-btn').textContent = state.pendingImport ? 'Annuler la restauration' : 'Restaurer une sauvegarde';
@@ -234,7 +284,9 @@ function lock() {
   state.session = null;
   state.items = [];
   state.planning = null;
+  state.sync = null;
   state.current = null;
+  state.syncStatus = 'idle';
   clearTimeout(state.lockTimer);
   closeAllSheets();
   $('list').replaceChildren();
@@ -266,6 +318,8 @@ async function onUnlock(e, bioPassword) {
     if (creating) {
       state.session = await VaultCrypto.newKey(pw);
       state.items = [];
+      state.planning = null;
+      state.sync = null;
       await persist();
     } else {
       const blob = state.pendingImport || storage.get(STORE_KEY);
@@ -273,6 +327,7 @@ async function onUnlock(e, bioPassword) {
       state.session = res.session;
       state.items = Array.isArray(res.data.items) ? res.data.items : [];
       state.planning = res.data.planning || null;
+      state.sync = res.data.sync && res.data.sync.priv ? res.data.sync : null;
       if (state.pendingImport) {
         storage.set(STORE_KEY, state.pendingImport);
         state.pendingImport = null;
@@ -287,14 +342,15 @@ async function onUnlock(e, bioPassword) {
     $('lock').hidden = true;
     $('vault').hidden = false;
     render();
-    showTab(settings.tab === 'plan' ? 'plan' : 'pw');
+    showPage(PAGES.includes(settings.page) ? settings.page : 'home', { instant: true });
     armAutolock();
+    sync.fetch(false);
   } catch (ex) {
     if (viaBio) {
       // Le mot de passe maître a changé depuis l'activation : on repart du mot de passe.
       bio.disable();
       lockMode();
-      err.textContent = 'Empreinte désactivée : entrez votre mot de passe maître.';
+      err.textContent = 'Empreinte désactivée : entre ton mot de passe maître.';
       return;
     }
     err.textContent = ex && ex.message === 'format' ? 'Fichier de sauvegarde invalide.' : 'Mot de passe incorrect.';
@@ -325,21 +381,212 @@ document.addEventListener('visibilitychange', () => {
   if (state.session && limit && Date.now() - state.hiddenAt >= limit) {
     lock();
     bio.prompt();
+    return;
+  }
+  if (state.session) {
+    sync.fetch(false);
+    if (state.page === 'home') renderHome();
   }
 });
 
-/* ---------- Liste ---------- */
+/* ---------- Navigation ---------- */
+
+function pageTitle(name) {
+  const dash = Planning.dashboard(state.planning);
+  const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  switch (name) {
+    case 'home': {
+      const h = new Date().getHours();
+      const hello = h >= 18 || h < 5 ? 'Bonsoir' : 'Salut';
+      return { kicker: today, title: dash.name ? `${hello} ${dash.name}` : hello };
+    }
+    case 'pw': return { kicker: plural(state.items.length, 'identifiant'), title: 'Mots de passe' };
+    case 'plan': return { kicker: today, title: 'Planning' };
+    default: return { kicker: 'Stryx Hub', title: 'Réglages' };
+  }
+}
+
+function updateHeader() {
+  const { kicker, title } = pageTitle(state.page);
+  $('page-kicker').textContent = kicker;
+  $('page-title').textContent = title;
+}
+
+function showPage(name, opts = {}) {
+  if (!PAGES.includes(name)) name = 'home';
+  const changed = state.page !== name;
+  state.page = name;
+  settings.page = name;
+  saveSettings();
+  PAGES.forEach((p) => {
+    const page = $(`page-${p}`);
+    const visible = p === name;
+    if (visible && (changed || opts.instant)) {
+      page.hidden = false;
+      page.style.animation = 'none';
+      void page.offsetWidth;
+      page.style.animation = '';
+    } else {
+      page.hidden = !visible;
+    }
+  });
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.page === name));
+  if (name === 'home') renderHome();
+  if (name === 'pw') render();
+  if (name === 'plan') { Planning.show(state.planning); updatePlanSyncButton(); }
+  if (name === 'settings') refreshSettings();
+  updateHeader();
+  if (changed) window.scrollTo({ top: 0, behavior: opts.instant ? 'auto' : 'smooth' });
+}
+
+document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showPage(t.dataset.page); });
+
+/* ---------- Accueil ---------- */
+
+function renderHome() {
+  if (!state.session) return;
+  const dash = Planning.dashboard(state.planning);
+
+  // Prochain service
+  const hero = $('home-next');
+  hero.classList.toggle('empty-hero', !dash.next);
+  if (dash.next) {
+    const n = dash.next;
+    const meta = el('div', 'hero-meta');
+    const pill = el('span', 'pill accent');
+    pill.append(icon('clock'), document.createTextNode(n.countdown));
+    meta.append(pill, el('span', 'pill', n.dur), el('span', 'pill', n.label));
+    if (n.note) {
+      const sw = el('span', 'pill swap');
+      sw.append(icon('swap'), document.createTextNode(n.note));
+      meta.append(sw);
+    }
+    const parts = [
+      icon('calendar', 'ic hero-ic'),
+      el('small', 'kicker', n.ongoing ? 'En service' : 'Prochain service'),
+      el('span', 'hero-day', n.dayLabel),
+      el('span', 'hero-time', `${n.start} – ${n.end}`),
+      meta,
+    ];
+    if (n.then.length) parts.push(el('div', 'hero-then', `Puis ${n.then.join(' · ')}`));
+    if (n.ongoing) {
+      const bar = el('div', 'hero-progress');
+      const fill = el('i');
+      fill.style.width = `${Math.round(n.progress * 100)}%`;
+      bar.append(fill);
+      parts.push(bar);
+    }
+    hero.replaceChildren(...parts);
+  } else if (dash.empty) {
+    hero.replaceChildren(
+      icon('link', 'ic hero-ic'),
+      el('small', 'kicker', 'Planning'),
+      el('span', 'hero-time', 'Ajoute ton planning'),
+      el('span', 'hero-day', state.sync ? 'En attente du premier planning de Claude.' : 'Connecte le planning automatique : Claude l\'enverra directement ici.'),
+    );
+  } else {
+    hero.replaceChildren(
+      icon('calendar', 'ic hero-ic'),
+      el('small', 'kicker', 'Planning'),
+      el('span', 'hero-time', 'Rien de prévu'),
+      el('span', 'hero-day', 'Aucun service à venir dans ton planning.'),
+    );
+  }
+
+  // Semaine : anneau heures / contrat + barres par jour
+  const w = dash.week;
+  const goal = w.contract || Math.max(w.total, 1);
+  const ratio = w.hasData ? Math.min(1, w.total / goal) : 0;
+  $('home-ring').style.strokeDashoffset = String(263.9 * (1 - ratio));
+  $('home-hours').textContent = w.hasData ? w.fmtTotal : '—';
+  $('home-contract').textContent = w.hasData ? (w.fmtContract ? `sur ${w.fmtContract}` : 'cette semaine') : 'cette semaine';
+  const max = Math.max(8 * 60, ...w.perDay);
+  $('home-bars').replaceChildren(...['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => {
+    const b = el('div', 'bar' + (w.perDay[i] ? ' on' : '') + (i === w.todayIdx ? ' today' : ''));
+    const fill = el('i');
+    fill.style.height = `${Math.max(4, Math.round((w.perDay[i] / max) * 62))}px`;
+    b.append(fill, el('small', '', d));
+    return b;
+  }));
+
+  // Équipe aujourd'hui
+  if (dash.today) {
+    $('home-team-count').textContent = plural(dash.today.count, 'personne');
+    $('home-team-sub').textContent = dash.today.meWorking
+      ? (dash.today.withMe.length ? `Avec toi : ${dash.today.withMe.slice(0, 4).join(', ')}${dash.today.withMe.length > 4 ? '…' : ''}` : 'au travail aujourd\'hui')
+      : 'au travail aujourd\'hui · toi en repos';
+  } else {
+    $('home-team-count').textContent = 'Équipe';
+    $('home-team-sub').textContent = dash.empty ? 'Le planning d\'équipe apparaîtra ici.' : 'Pas de planning d\'équipe cette semaine.';
+  }
+
+  // Coffre
+  const n = state.items.length;
+  const weak = state.items.filter((it) => it.pass && VaultCrypto.strength(it.pass) < 2).length;
+  $('home-vault-count').textContent = plural(n, 'identifiant');
+  $('home-vault-health').textContent = n ? (weak ? `${weakLabel(weak)} à changer` : 'Tous tes mots de passe sont solides') : 'Ajoute ton premier mot de passe';
+  const score = n ? (n - weak) / n : 0;
+  const health = $('home-health');
+  health.className = 'health' + (score < 0.5 ? ' low' : score < 0.85 ? ' mid' : '');
+  health.firstElementChild.style.width = `${Math.round(score * 100)}%`;
+
+  renderSyncLine();
+}
+
+function renderSyncLine() {
+  const line = $('home-sync');
+  const dot = el('i', 'dot');
+  let text;
+  line.classList.remove('ok');
+  if (!native || !native.fetchPlanning) {
+    line.hidden = true;
+    return;
+  }
+  line.hidden = false;
+  if (!state.sync) {
+    line.replaceChildren(icon('link'), el('span', '', ''));
+    line.lastChild.append(el('b', '', 'Planning automatique'), document.createTextNode(' · touche pour connecter ce téléphone'));
+    return;
+  }
+  const st = state.syncStatus;
+  if (st === 'loading') { text = 'Recherche d\'un nouveau planning…'; dot.classList.add('wait'); }
+  else if (st === 'error') { text = 'Hors ligne · dernier planning gardé'; dot.classList.add('err'); }
+  else if (state.sync.lastAt) { text = `Planning synchronisé ${timeAgo(state.sync.lastAt)}`; dot.classList.add('ok'); line.classList.add('ok'); }
+  else { text = 'Connecté · en attente du premier planning de Claude'; dot.classList.add('wait'); }
+  line.replaceChildren(dot, el('span', '', text));
+}
+
+$('home-next').onclick = () => {
+  const dash = Planning.dashboard(state.planning);
+  if (dash.empty && native && native.fetchPlanning && !state.sync) { sync.openSheet(); return; }
+  showPage('plan');
+};
+$('home-week').onclick = () => showPage('plan');
+$('home-team').onclick = () => {
+  showPage('plan');
+  Planning.openTeamToday();
+};
+$('home-sync').onclick = () => sync.openSheet();
+$('home-gen').onclick = () => openGenerator(false);
+$('home-add').onclick = () => openEdit(null);
+
+// Appelé par planning.js après chaque affichage (titre, bouton de synchro).
+window.onPlanningRendered = () => {
+  if (state.page === 'plan') updateHeader();
+  updatePlanSyncButton();
+};
+
+/* ---------- Liste des mots de passe ---------- */
 
 function renderChips() {
   const chips = $('chips');
   const counts = {};
   state.items.forEach((it) => { counts[it.cat] = (counts[it.cat] || 0) + 1; });
-  const all = [{ id: 'all', label: 'Tout', icon: '✦' }, ...CATEGORIES.filter((c) => counts[c.id])];
+  const all = [{ id: 'all', label: 'Tout' }, ...CATEGORIES.filter((c) => counts[c.id])];
   if (!all.some((c) => c.id === state.filter)) state.filter = 'all';
   chips.replaceChildren(...all.map((c) => {
-    const b = document.createElement('button');
-    b.className = 'chip' + (state.filter === c.id ? ' active' : '');
-    b.textContent = `${c.icon} ${c.label}`;
+    const b = el('button', 'chip' + (state.filter === c.id ? ' active' : ''), c.id === 'all' ? `Tout · ${state.items.length}` : `${c.label} · ${counts[c.id]}`);
+    b.type = 'button';
     b.onclick = () => { state.filter = c.id; render(); };
     return b;
   }));
@@ -355,33 +602,29 @@ function render() {
 
   const weak = state.items.filter((it) => it.pass && VaultCrypto.strength(it.pass) < 2).length;
   $('stats').textContent = state.items.length
-    ? `${state.items.length} identifiant${state.items.length > 1 ? 's' : ''}` + (weak ? ` · ⚠ ${weak} faible${weak > 1 ? 's' : ''}` : ' · tous sécurisés')
+    ? (q || state.filter !== 'all' ? `${plural(list.length, 'résultat')}` : (weak ? `${weakLabel(weak)} à renforcer` : 'Tous tes mots de passe sont solides'))
     : '';
 
   $('empty').hidden = state.items.length > 0;
   $('list').replaceChildren(...list.map((it, i) => {
-    const li = document.createElement('li');
-    li.className = 'item glass';
-    li.style.animationDelay = Math.min(i * 30, 300) + 'ms';
-    const av = document.createElement('div');
-    av.className = 'avatar';
+    const li = el('li', 'item card');
+    li.style.animationDelay = Math.min(i * 25, 300) + 'ms';
+    const av = el('div', 'avatar');
     fillAvatar(av, it);
-    const txt = document.createElement('div');
-    txt.className = 'item-txt';
-    const t = document.createElement('b');
-    t.textContent = it.title;
-    const u = document.createElement('span');
-    u.textContent = it.user || catOf(it.cat).label;
-    txt.append(t, u);
-    const cp = document.createElement('button');
-    cp.className = 'icon-btn';
+    const txt = el('div', 'item-txt');
+    txt.append(el('b', '', it.title), el('span', '', it.user || catOf(it.cat).label));
+    li.append(av, txt);
+    if (it.pass && VaultCrypto.strength(it.pass) < 2) li.append(el('span', 'weak-tag', 'Faible'));
+    const cp = el('button', 'icon-btn sm');
+    cp.type = 'button';
     cp.setAttribute('aria-label', 'Copier le mot de passe');
-    cp.textContent = '⧉';
+    cp.append(icon('copy'));
     cp.onclick = (e) => { e.stopPropagation(); copy(it.pass, 'Mot de passe'); };
-    li.append(av, txt, cp);
+    li.append(cp);
     li.onclick = () => openView(it.id);
     return li;
   }));
+  if (state.page === 'pw') updateHeader();
 }
 
 /* ---------- Détail ---------- */
@@ -392,7 +635,7 @@ function openView(id) {
   state.current = id;
   fillAvatar($('v-avatar'), it);
   $('v-title').textContent = it.title;
-  $('v-cat').textContent = `${catOf(it.cat).icon} ${catOf(it.cat).label}`;
+  $('v-cat').textContent = catOf(it.cat).label;
   $('v-user').textContent = it.user || '—';
   $('v-pass').textContent = '••••••••••';
   $('v-pass').dataset.shown = '';
@@ -408,10 +651,11 @@ function openView(id) {
 
 $('v-eye').onclick = () => {
   const it = state.items.find((x) => x.id === state.current);
-  const el = $('v-pass');
-  const show = !el.dataset.shown;
-  el.dataset.shown = show ? '1' : '';
-  el.textContent = show ? (it.pass || '—') : '••••••••••';
+  if (!it) return;
+  const out = $('v-pass');
+  const show = !out.dataset.shown;
+  out.dataset.shown = show ? '1' : '';
+  out.textContent = show ? (it.pass || '—') : '••••••••••';
 };
 
 document.querySelectorAll('[data-copy]').forEach((b) => {
@@ -425,27 +669,18 @@ document.querySelectorAll('[data-copy]').forEach((b) => {
 
 $('v-edit').onclick = () => { closeSheet('view-sheet'); openEdit(state.current); };
 
-/* ---------- Onglets ---------- */
+/* ---------- Planning : codes, suppression ---------- */
 
-function showTab(name) {
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
-  $('tab-pw').hidden = name !== 'pw';
-  $('tab-plan').hidden = name !== 'plan';
-  if (name === 'plan') Planning.show(state.planning);
-  settings.tab = name;
-  storage.set(SETTINGS_KEY, settings);
-}
-document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
-
-/* ---------- Import d'un planning (code fourni par Claude) ---------- */
-
-$('plan-import').onclick = () => {
+function openPlanCode() {
   $('plan-code').value = '';
   $('plan-error').textContent = '';
   $('plan-clear').hidden = !state.planning;
   $('plan-version').textContent = native && native.appVersion ? `Stryx Hub ${native.appVersion()}` : '';
   openSheet('plan-sheet');
-};
+}
+$('plan-import').onclick = openPlanCode;
+$('s-plancode').onclick = openPlanCode;
+
 $('plan-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   let add;
@@ -453,24 +688,24 @@ $('plan-form').addEventListener('submit', async (e) => {
     add = await Planning.decode($('plan-code').value);
   } catch (ex) {
     $('plan-error').textContent = ex && ex.message === 'inflate'
-      ? 'Ce téléphone ne lit pas les codes compressés : demandez à Claude le « code long ».'
-      : 'Code incomplet ou abîmé : recopiez tout le code envoyé par Claude, du début (STRYXPLAN) jusqu\'à la fin.';
+      ? 'Ce téléphone ne lit pas les codes compressés : demande à Claude le « code long ».'
+      : 'Code incomplet ou abîmé : recopie tout le code envoyé par Claude, du début (STRYXPLAN) jusqu\'à la fin.';
     return;
   }
   state.planning = Planning.merge(state.planning, add);
   await persist();
   $('plan-code').value = '';
   closeSheet('plan-sheet');
-  Planning.show(state.planning);
+  afterPlanningChange();
   const nDays = new Set(add.entries.map((x) => x.date)).size;
-  toast(`Planning ajouté ✓ (${nDays} jour${nDays > 1 ? 's' : ''})`);
+  toast(`Planning ajouté ✓ (${plural(nDays, 'jour')})`);
 });
 $('plan-remove').onclick = async () => {
   const wk = Planning.currentWeek();
   if (!wk || !confirm(`Supprimer le planning ${Planning.weekLabel(wk)} ?`)) return;
   state.planning = Planning.removeWeek(state.planning, wk);
   await persist();
-  Planning.show(state.planning);
+  afterPlanningChange();
   toast('Semaine supprimée');
 };
 $('plan-clear').onclick = async () => {
@@ -478,16 +713,160 @@ $('plan-clear').onclick = async () => {
   state.planning = null;
   await persist();
   closeSheet('plan-sheet');
-  Planning.show(null);
+  afterPlanningChange();
   toast('Planning effacé');
+};
+
+function afterPlanningChange() {
+  if (state.page === 'plan') Planning.show(state.planning);
+  if (state.page === 'home') renderHome();
+  updateHeader();
+}
+
+/* ---------- Planning automatique (synchronisation chiffrée) ---------- */
+
+const sync = {
+  supported: () => !!(native && native.fetchPlanning),
+
+  fetch(manual) {
+    if (!state.session || !state.sync || !sync.supported()) return;
+    if (!manual && Date.now() - state.syncAsked < SYNC_MIN_INTERVAL_MS) return;
+    state.syncAsked = Date.now();
+    state.syncStatus = 'loading';
+    sync.manual = manual;
+    sync.refreshUi();
+    native.fetchPlanning();
+  },
+
+  // Applique un planning reçu : semaines retirées, puis semaines ajoutées ou remplacées.
+  async apply(payload) {
+    if (state.sync.lastId === payload.id) return false;
+    let plan = state.planning;
+    for (const wk of Array.isArray(payload.removeWeeks) ? payload.removeWeeks : []) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(wk)) plan = Planning.removeWeek(plan, wk);
+    }
+    for (const obj of Array.isArray(payload.plans) ? payload.plans : []) {
+      if (obj && /^\d{4}-\d{2}-\d{2}$/.test(obj.week || '') && Array.isArray(obj.people)) {
+        plan = Planning.merge(plan, Planning.fromTeam(obj));
+      }
+    }
+    state.planning = plan;
+    state.sync.lastId = payload.id;
+    state.sync.lastAt = Date.now();
+    await persist();
+    return true;
+  },
+
+  async receive(ok, text) {
+    if (!state.session || !state.sync) return;
+    const manual = sync.manual;
+    sync.manual = false;
+    if (!ok) {
+      state.syncStatus = text === 'none' ? 'none' : 'error';
+      sync.refreshUi();
+      if (manual) toast(text === 'none' ? 'Pas encore de planning envoyé par Claude' : 'Connexion impossible pour le moment');
+      return;
+    }
+    try {
+      const payload = await PlanSync.open(JSON.parse(text), state.sync);
+      const changed = await sync.apply(payload);
+      state.syncStatus = 'ok';
+      if (!state.sync.lastAt) state.sync.lastAt = Date.now();
+      if (changed) {
+        afterPlanningChange();
+        toast('Planning mis à jour automatiquement ✓');
+      } else if (manual) {
+        toast('Ton planning est déjà à jour');
+      }
+    } catch (ex) {
+      // Fichier chiffré pour une autre liaison (ancien téléphone) : on attend le prochain envoi.
+      state.syncStatus = ex && ex.message === 'other-key' ? 'waiting' : 'error';
+      if (manual) toast(state.syncStatus === 'waiting' ? 'En attente d\'un planning pour ce téléphone' : 'Planning reçu illisible');
+    }
+    sync.refreshUi();
+  },
+
+  statusText() {
+    if (!sync.supported()) return 'Disponible dans l\'appli Android';
+    if (!state.sync) return 'Non connecté · touche pour connecter';
+    switch (state.syncStatus) {
+      case 'loading': return 'Recherche d\'un nouveau planning…';
+      case 'error': return 'Hors ligne pour le moment';
+      case 'waiting':
+      case 'none': return state.sync.lastAt ? `À jour · ${timeAgo(state.sync.lastAt)}` : 'Connecté · en attente du premier planning';
+      default: return state.sync.lastAt ? `Synchronisé ${timeAgo(state.sync.lastAt)}` : 'Connecté · en attente du premier planning';
+    }
+  },
+
+  openSheet() {
+    if (!sync.supported()) { toast('Le planning automatique marche dans l\'appli Android'); return; }
+    sync.refreshSheet();
+    openSheet('sync-sheet');
+  },
+
+  refreshSheet() {
+    const on = !!state.sync;
+    $('sync-off').hidden = on;
+    $('sync-on').hidden = !on;
+    $('sync-actions-off').hidden = on;
+    $('sync-actions-on').hidden = !on;
+    $('sync-error').textContent = '';
+    if (on) {
+      $('sync-code').textContent = state.sync.code;
+      const dot = el('i', 'dot' + (state.syncStatus === 'error' ? ' err' : state.sync.lastAt ? ' ok' : ' wait'));
+      $('sync-status').replaceChildren(dot, el('span', '', `${sync.statusText()} · clé ${state.sync.kid}`));
+    }
+  },
+
+  refreshUi() {
+    if (!$('sync-sheet').hidden) sync.refreshSheet();
+    if (state.page === 'home') renderSyncLine();
+    if (state.page === 'settings') refreshSettings();
+    updatePlanSyncButton();
+  },
+};
+
+function updatePlanSyncButton() {
+  const btn = $('plan-sync-btn');
+  btn.hidden = !sync.supported();
+  $('plan-sync-label').textContent = state.sync ? (state.syncStatus === 'loading' ? 'Recherche…' : 'Actualiser') : 'Planning automatique';
+}
+
+window.stryxSync = (ok, text) => { sync.receive(ok, text); };
+
+$('plan-sync-btn').onclick = () => { if (state.sync) sync.fetch(true); else sync.openSheet(); };
+$('s-sync').onclick = () => sync.openSheet();
+$('sync-link').onclick = async () => {
+  try {
+    state.sync = await PlanSync.createLink();
+    state.syncStatus = 'idle';
+    await persist();
+    sync.refreshSheet();
+    sync.refreshUi();
+    copy(state.sync.code, 'Code de liaison');
+  } catch {
+    state.sync = null;
+    $('sync-error').textContent = 'Impossible de créer la clé sur ce téléphone.';
+  }
+};
+$('sync-copy').onclick = () => copy(state.sync && state.sync.code, 'Code de liaison');
+$('sync-code').onclick = () => copy(state.sync && state.sync.code, 'Code de liaison');
+$('sync-refresh').onclick = () => sync.fetch(true);
+$('sync-unlink').onclick = async () => {
+  if (!confirm('Déconnecter le planning automatique ?\n\nTon planning actuel est gardé. Pour te reconnecter, il faudra renvoyer un nouveau code à Claude.')) return;
+  state.sync = null;
+  state.syncStatus = 'idle';
+  await persist();
+  sync.refreshSheet();
+  sync.refreshUi();
+  toast('Planning automatique déconnecté');
 };
 
 /* ---------- Ajout / modification ---------- */
 
 $('f-cat').replaceChildren(...CATEGORIES.map((c) => {
-  const o = document.createElement('option');
+  const o = el('option', '', c.label);
   o.value = c.id;
-  o.textContent = `${c.icon} ${c.label}`;
   return o;
 }));
 
@@ -505,7 +884,7 @@ function openEdit(id) {
   $('del-btn').hidden = !it;
   setStrength($('strength-f'), $('f-pass').value);
   openSheet('edit-sheet');
-  if (!it) setTimeout(() => $('f-title').focus(), 250);
+  if (!it) setTimeout(() => $('f-title').focus(), 260);
 }
 
 $('f-pass').addEventListener('input', () => setStrength($('strength-f'), $('f-pass').value));
@@ -529,6 +908,7 @@ $('edit-form').addEventListener('submit', async (e) => {
   await persist();
   closeSheet('edit-sheet');
   render();
+  if (state.page === 'home') renderHome();
   toast(existing ? 'Modifié' : 'Enregistré');
 });
 
@@ -539,6 +919,7 @@ $('del-btn').onclick = async () => {
   await persist();
   closeSheet('edit-sheet');
   render();
+  if (state.page === 'home') renderHome();
   toast('Supprimé');
 };
 
@@ -555,7 +936,7 @@ function regen() {
 }
 ['gen-len', 'g-up', 'g-low', 'g-num', 'g-sym'].forEach((id) => $(id).addEventListener('input', regen));
 $('gen-again').onclick = regen;
-// Deux usages : depuis le formulaire (« Utiliser ») ou depuis l'écran principal (« Enregistrer »).
+// Deux usages : depuis le formulaire (« Utiliser ») ou depuis l'appli (« Enregistrer »).
 let genFromForm = false;
 function openGenerator(fromForm) {
   genFromForm = fromForm;
@@ -570,35 +951,36 @@ $('gen-out').onclick = () => copy($('gen-out').textContent, 'Mot de passe');
 $('gen-use').onclick = () => {
   const pw = $('gen-out').textContent;
   closeSheet('gen-sheet');
-  if (!genFromForm) {
-    // Nouvel identifiant pré-rempli avec le mot de passe généré : il ne reste qu'à le nommer.
-    openEdit(null);
-  }
+  // Depuis l'appli : nouvel identifiant pré-rempli, il ne reste qu'à le nommer.
+  if (!genFromForm) openEdit(null);
   $('f-pass').value = pw;
   $('f-pass').type = 'text';
   setStrength($('strength-f'), pw);
 };
 
-/* ---------- Paramètres ---------- */
+/* ---------- Réglages ---------- */
 
-$('settings-btn').onclick = () => {
+function setSwitch(id, on) { $(id).classList.toggle('on', !!on); }
+
+function refreshSettings() {
   $('s-autolock').value = String(settings.autolock);
+  $('s-sync-sub').textContent = sync.statusText();
   bio.refreshSettings();
   updates.refreshSettings();
   refreshScreenSetting();
   refreshIconsSetting();
-  openSheet('settings-sheet');
-};
+}
+
 $('s-autolock').onchange = () => {
   settings.autolock = +$('s-autolock').value;
-  storage.set(SETTINGS_KEY, settings);
+  saveSettings();
   armAutolock();
 };
 
 $('s-export').onclick = () => {
   const blob = storage.get(STORE_KEY);
   if (!blob) return;
-  const name = `stryxmdp-${new Date().toISOString().slice(0, 10)}.json`;
+  const name = `stryxhub-${new Date().toISOString().slice(0, 10)}.json`;
   if (native) {
     native.saveFile(name, JSON.stringify(blob));
     return;
@@ -631,7 +1013,6 @@ function csvReset() {
 }
 
 $('s-csv').onclick = () => {
-  closeSheet('settings-sheet');
   csvReset();
   openSheet('csv-sheet');
 };
@@ -645,23 +1026,16 @@ $('csv-in').onchange = async () => {
     const fresh = items.filter((it, i) => !state.items.some((x) => sameEntry(x, it)) && items.findIndex((y) => sameEntry(y, it)) === i);
     const dupes = items.length - fresh.length;
     csvPending = fresh;
-    $('csv-n').textContent = fresh.length
-      ? `${fresh.length} identifiant${fresh.length > 1 ? 's' : ''} à importer`
-      : 'Rien de nouveau à importer';
+    $('csv-n').textContent = fresh.length ? `${plural(fresh.length, 'identifiant')} à importer` : 'Rien de nouveau à importer';
     $('csv-detail').textContent = [
       dupes ? `${dupes} déjà dans le coffre` : '',
-      skipped ? `${skipped} ligne${skipped > 1 ? 's' : ''} vide${skipped > 1 ? 's' : ''} ignorée${skipped > 1 ? 's' : ''}` : '',
+      skipped ? `${plural(skipped, 'ligne')} vide${skipped > 1 ? 's' : ''} ignorée${skipped > 1 ? 's' : ''}` : '',
     ].filter(Boolean).join(' · ');
     $('csv-preview').replaceChildren(...fresh.slice(0, 50).map((it) => {
-      const li = document.createElement('li');
-      const av = document.createElement('div');
-      av.className = 'avatar';
+      const li = el('li');
+      const av = el('div', 'avatar');
       fillAvatar(av, it);
-      const t = document.createElement('span');
-      t.textContent = it.title + (it.user ? ` · ${it.user}` : '');
-      const c = document.createElement('em');
-      c.textContent = catOf(it.cat).label;
-      li.append(av, t, c);
+      li.append(av, el('span', '', it.title + (it.user ? ` · ${it.user}` : '')), el('em', '', catOf(it.cat).label));
       return li;
     }));
     $('csv-intro').hidden = true;
@@ -670,7 +1044,7 @@ $('csv-in').onchange = async () => {
     $('csv-pick').textContent = 'Autre fichier';
   } catch (ex) {
     $('csv-error').textContent = ex && ex.message === 'colonnes'
-      ? 'Fichier non reconnu : aucune colonne « password » trouvée. Vérifiez que c\'est bien un export CSV de mots de passe.'
+      ? 'Fichier non reconnu : aucune colonne « password » trouvée. Vérifie que c\'est bien un export CSV de mots de passe.'
       : 'Impossible de lire ce fichier.';
   }
 };
@@ -686,8 +1060,10 @@ $('csv-go').onclick = async () => {
   closeSheet('csv-sheet');
   state.filter = 'all';
   render();
-  toast(`${n} identifiant${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''} ✓ · supprimez le fichier CSV`);
+  toast(`${plural(n, 'identifiant')} importé${n > 1 ? 's' : ''} ✓ · supprime le fichier CSV`);
 };
+
+/* ---------- Sauvegardes ---------- */
 
 function pickBackup() { $('file-in').value = ''; $('file-in').click(); }
 $('s-import').onclick = () => {
@@ -712,8 +1088,9 @@ $('file-in').onchange = async () => {
   }
 };
 
+/* ---------- Mot de passe maître ---------- */
+
 $('s-change').onclick = () => {
-  closeSheet('settings-sheet');
   ['pw-old', 'pw-new', 'pw-new2'].forEach((id) => { $(id).value = ''; });
   $('pw-error').textContent = '';
   setStrength($('strength-pw'), '');
@@ -735,14 +1112,15 @@ $('pw-form').addEventListener('submit', async (e) => {
   closeSheet('pw-sheet');
   if (bio.enabled()) {
     bio.disable();
-    toast('Mot de passe changé · réactivez l\'empreinte dans les paramètres');
+    toast('Mot de passe changé · réactive l\'empreinte dans les réglages');
   } else {
     toast('Mot de passe maître changé');
   }
+  refreshSettings();
 });
 
 $('s-wipe').onclick = () => {
-  if (!confirm('Effacer définitivement tous les mots de passe de cet appareil ?')) return;
+  if (!confirm('Effacer définitivement tous les mots de passe et le planning de cet appareil ?')) return;
   if (!confirm('Dernière confirmation : cette action est irréversible.')) return;
   storage.remove(STORE_KEY);
   bio.disable();
@@ -778,12 +1156,18 @@ if (!window.crypto || !crypto.subtle) {
   $('lock-btn').disabled = true;
 }
 
-// Bouton « retour » d'Android : ferme la fenêtre ouverte au lieu de quitter l'appli.
+// Bouton « retour » d'Android : ferme la fenêtre ouverte, puis revient à l'accueil, puis quitte.
 window.stryxBack = () => {
   const open = [...document.querySelectorAll('.sheet')].filter((s) => s.classList.contains('open')).pop();
-  if (!open) return false;
-  closeSheet(open.id);
-  return true;
+  if (open) {
+    closeSheet(open.id);
+    return true;
+  }
+  if (state.session && state.page !== 'home') {
+    showPage('home');
+    return true;
+  }
+  return false;
 };
 
 if (!native && 'serviceWorker' in navigator && location.protocol === 'https:') {
@@ -811,7 +1195,7 @@ const bio = {
   offer(pw) {
     if (!bio.available() || bio.enabled() || settings.bioAsked) return;
     settings.bioAsked = true;
-    storage.set(SETTINGS_KEY, settings);
+    saveSettings();
     bio.openSheet(pw);
   },
   openSheet(pw) {
@@ -822,11 +1206,10 @@ const bio = {
     openSheet('bio-sheet');
   },
   refreshSettings() {
-    const tile = $('s-bio');
-    tile.hidden = !bio.available() && !bio.enabled();
+    $('s-bio').hidden = !bio.available() && !bio.enabled();
     const on = bio.enabled();
-    $('s-bio-title').textContent = on ? 'Empreinte digitale : activée' : 'Activer l\'empreinte digitale';
-    $('s-bio-sub').textContent = on ? 'Touchez pour la désactiver' : 'Déverrouillez le coffre avec votre doigt';
+    $('s-bio-sub').textContent = on ? 'Activée · touche pour la désactiver' : 'Déverrouille le coffre avec ton doigt';
+    setSwitch('s-bio-switch', on);
   },
 };
 
@@ -838,7 +1221,6 @@ $('s-bio').onclick = () => {
     bio.refreshSettings();
     toast('Empreinte désactivée');
   } else {
-    closeSheet('settings-sheet');
     bio.openSheet(null);
   }
 };
@@ -858,7 +1240,7 @@ $('bio-form').addEventListener('submit', async (e) => {
   native.biometricEnable(pw);
 });
 $('bio-sheet').addEventListener('click', (e) => {
-  if (e.target === $('bio-sheet') || e.target.hasAttribute('data-close')) bio.pendingPw = null;
+  if (e.target === $('bio-sheet') || (e.target.closest && e.target.closest('[data-close]'))) bio.pendingPw = null;
 });
 
 // Réponses du code Android : action = 'enable' | 'unlock', ok = vrai/faux.
@@ -867,7 +1249,7 @@ window.stryxBio = (action, ok, payload) => {
     if (ok) onUnlock(null, payload);
     else if (payload === 'invalidated') {
       lockMode();
-      $('lock-error').textContent = 'Vos empreintes ont changé : entrez votre mot de passe maître, puis réactivez l\'empreinte.';
+      $('lock-error').textContent = 'Tes empreintes ont changé : entre ton mot de passe maître, puis réactive l\'empreinte.';
     } else if (payload !== 'cancel') toast(payload);
     return;
   }
@@ -875,6 +1257,7 @@ window.stryxBio = (action, ok, payload) => {
     if (ok) {
       closeSheet('bio-sheet');
       lockMode();
+      bio.refreshSettings();
       toast('Empreinte activée ✓');
     } else if (payload !== 'cancel') {
       $('bio-error').textContent = payload;
@@ -886,14 +1269,14 @@ window.stryxBio = (action, ok, payload) => {
 
 function refreshIconsSetting() {
   const on = settings.icons !== false;
-  $('s-icons-title').textContent = on ? 'Logos des sites : affichés' : 'Logos des sites : masqués';
   $('s-icons-sub').textContent = on
-    ? 'Le nom du site (ex. discord.com) est demandé à DuckDuckGo pour son logo. Touchez pour masquer.'
-    : 'Aucune connexion pour les logos : seules les initiales sont affichées. Touchez pour afficher.';
+    ? 'Le nom du site (ex. discord.com) est demandé à DuckDuckGo pour son logo'
+    : 'Masqués : seules les initiales sont affichées';
+  setSwitch('s-icons-switch', on);
 }
 $('s-icons').onclick = () => {
   settings.icons = settings.icons === false;
-  storage.set(SETTINGS_KEY, settings);
+  saveSettings();
   refreshIconsSetting();
   render();
 };
@@ -905,11 +1288,11 @@ function refreshScreenSetting() {
   $('s-screen').hidden = !ok;
   if (!ok) return;
   const on = native.screenProtected();
-  $('s-screen-title').textContent = on ? 'Protection d\'écran : activée' : 'Protection d\'écran : désactivée';
   $('s-screen-sub').textContent = on
-    ? 'Captures et partage d\'écran bloqués (écran noir sur Discord). Touchez pour autoriser le stream.'
-    : 'Stream et captures autorisés : attention à ne pas afficher de mot de passe.';
-  $('s-screen').classList.toggle('warn-tile', !on);
+    ? 'Captures et partage d\'écran bloqués (écran noir sur Discord)'
+    : 'Stream autorisé : attention à ne pas afficher de mot de passe';
+  $('s-screen').classList.toggle('warn', !on);
+  setSwitch('s-screen-switch', on);
 }
 $('s-screen').onclick = () => {
   const on = native.screenProtected();
@@ -937,7 +1320,7 @@ const updates = {
   },
   refreshSettings() {
     $('s-update').hidden = !updates.supported();
-    if (updates.supported()) $('s-update-sub').textContent = `Version ${native.appVersion()} · toucher pour vérifier`;
+    if (updates.supported()) $('s-update-sub').textContent = `Version ${native.appVersion()} · touche pour vérifier`;
   },
 };
 
@@ -954,9 +1337,8 @@ window.stryxUpdate = (event, payload) => {
   switch (event) {
     case 'available':
       $('update-title').textContent = 'Mise à jour disponible';
-      $('update-sub').textContent = `Stryx Hub ${payload} · vos mots de passe sont conservés`;
+      $('update-sub').textContent = `Stryx Hub ${payload} · tes données sont conservées`;
       $('update-bar').hidden = false;
-      if (updates.manual) closeSheet('settings-sheet');
       updates.reset();
       break;
     case 'none':
@@ -975,7 +1357,7 @@ window.stryxUpdate = (event, payload) => {
       break;
     case 'permission':
       updates.reset();
-      $('update-sub').textContent = 'Autorisez Stryx Hub à installer des applis, puis revenez et touchez « Mettre à jour ».';
+      $('update-sub').textContent = 'Autorise Stryx Hub à installer des applis, puis reviens et touche « Mettre à jour ».';
       break;
     case 'error':
       updates.reset();
@@ -985,7 +1367,7 @@ window.stryxUpdate = (event, payload) => {
   }
 };
 
-/* ---------- Installation (icône sur l'écran d'accueil) ---------- */
+/* ---------- Installation (icône sur l'écran d'accueil, version web) ---------- */
 
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1001,7 +1383,7 @@ addEventListener('beforeinstallprompt', (e) => {
 addEventListener('appinstalled', () => {
   installPrompt = null;
   $('install-btn').hidden = true;
-  toast('Stryx Hub est installé sur votre écran d\'accueil');
+  toast('Stryx Hub est installé sur ton écran d\'accueil');
 });
 if (isIOS && !isStandalone() && !native) $('install-btn').hidden = false;
 
@@ -1015,6 +1397,9 @@ $('install-btn').onclick = async () => {
     openSheet('ios-sheet');
   }
 };
+
+// Rafraîchit l'accueil chaque minute (compte à rebours du prochain service).
+setInterval(() => { if (state.session && state.page === 'home' && !document.hidden) renderHome(); }, 60000);
 
 starfield();
 lockMode();

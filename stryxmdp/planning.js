@@ -6,6 +6,7 @@
 //   "teams": { "AAAA-MM-JJ" (lundi): { "me": "Nom", "totals": [7 × "HH:MM"],
 //              "people": [[ "Nom", "prévu", "contrat", [7 jours × ["HH:MM-HH:MM*" | "CP HH:MM"]] ]] } } }
 // Les heures après minuit s'écrivent 24:00 et plus (ex. 22:00-26:30).
+// Échanges de créneaux : "swaps": [{ "day": 0-6, "a": "Nom", "b": "Nom" }] (affichés dans les deux vues).
 'use strict';
 
 const Planning = (() => {
@@ -49,9 +50,19 @@ const Planning = (() => {
     return new Response(stream).text();
   }
 
+  const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || '';
+
+  // Nom de la personne avec qui `name` a échangé son créneau ce jour-là (ou '').
+  function swapWith(team, name, day) {
+    const s = (team.swaps || []).find((x) => x.day === day && (norm(x.a) === norm(name) || norm(x.b) === norm(name)));
+    if (!s) return '';
+    return norm(s.a) === norm(name) ? s.b : s.a;
+  }
+
   // Planning d'équipe (v2) : extrait aussi « mes » créneaux pour la vue personnelle.
   function fromTeam(obj) {
-    const team = { me: obj.me || '', totals: obj.totals || [], people: Array.isArray(obj.people) ? obj.people : [] };
+    const swaps = (Array.isArray(obj.swaps) ? obj.swaps : []).filter((s) => s && Number.isInteger(s.day) && s.a && s.b);
+    const team = { me: obj.me || '', totals: obj.totals || [], people: Array.isArray(obj.people) ? obj.people : [], swaps };
     const mine = team.people.find((p) => norm(p[0]) === norm(team.me));
     const monday = parseDate(obj.week);
     const entries = [];
@@ -60,10 +71,12 @@ const Planning = (() => {
         const date = iso(addDays(monday, i));
         const work = slots.filter((s) => !/^CP/i.test(s));
         const cp = slots.find((s) => /^CP/i.test(s));
-        if (!work.length) entries.push({ date, off: true, label: cp ? `Congé (${fmtDur(minutes(cp.slice(3)))})` : 'Repos' });
+        const swap = swapWith(team, mine[0], i);
+        const note = swap ? `Échange avec ${firstName(swap)}` : '';
+        if (!work.length) entries.push({ date, off: true, label: cp ? `Congé (${fmtDur(minutes(cp.slice(3)))})` : 'Repos', note });
         work.forEach((s) => {
           const [start, end] = s.replace('*', '').split('-');
-          entries.push({ date, start, end, label: 'Burger King' });
+          entries.push({ date, start, end, label: 'Burger King', note });
         });
       });
     }
@@ -245,7 +258,7 @@ const Planning = (() => {
       const cp = leave ? leave.cp : undefined;
       if (!work.length && cp === undefined) { resting.push({ name: p[0], isMe }); continue; }
       work.sort((x, y) => x.start - y.start);
-      rows.push({ name: p[0], isMe, work, cp, first: work.length ? work[0].start : 99999 });
+      rows.push({ name: p[0], isMe, work, cp, swap: swapWith(team, p[0], teamDay), first: work.length ? work[0].start : 99999 });
     }
     // Ordre d'arrivée : premier créneau de la journée, puis heure de départ.
     const lastEnd = (r) => (r.work.length ? r.work[r.work.length - 1].end : 99999);
@@ -281,7 +294,12 @@ const Planning = (() => {
     const body = [head];
     for (const r of rows) {
       const row = el('div', 'tl-row' + (r.isMe ? ' me' : ''));
-      row.append(el('div', 'tl-name', r.name));
+      const nameCell = el('div', 'tl-name', r.name);
+      if (r.swap) {
+        nameCell.append(el('em', 'tl-swap', `⇄ ${firstName(r.swap)}`));
+        nameCell.title = `Échange avec ${r.swap}`;
+      }
+      row.append(nameCell);
       const track = el('div', 'tl-track');
       for (let m = Math.ceil(from / step) * step; m <= to; m += step) {
         const g = el('i', 'tl-grid');
@@ -337,7 +355,7 @@ const Planning = (() => {
     const btn = $('plan-remove');
     const has = wk && (((data.teams || {})[wk]) || validEntries(data.entries).some((e) => mondayOfIso(e.date) === wk));
     btn.hidden = !has;
-    if (has) btn.textContent = `🗑 Supprimer la semaine ${weekLabel(wk)}`;
+    if (has) btn.textContent = `Supprimer la semaine ${weekLabel(wk)}`;
   }
   const mondayOfIso = (d) => iso(mondayOf(parseDate(d)));
 
@@ -368,6 +386,7 @@ const Planning = (() => {
     setMode(mode);
     $('plan-foot').textContent = (data.updated ? `Planning mis à jour le ${parseDate(data.updated).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}. ` : '')
       + 'Nouveau planning ? Envoie la photo à Claude.';
+    if (window.onPlanningRendered) window.onPlanningRendered();
   }
 
   $('week-prev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); updateRemoveBtn(); };
@@ -417,5 +436,94 @@ const Planning = (() => {
     return `du ${start.getDate()} au ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'long' })}`;
   }
 
-  return { show, decode, merge, currentWeek, removeWeek, weekLabel };
+  /* ----- Résumé pour la page d'accueil ----- */
+
+  function dashboard(planning, now = new Date()) {
+    const p = planning || {};
+    const entries = validEntries(p.entries);
+    const teams = p.teams || {};
+    const shifts = entries
+      .filter((e) => !e.off && e.start && e.end)
+      .map((e) => ({ e, at: startAt(e), dur: duration(e) }))
+      .sort((a, b) => a.at - b.at);
+
+    // Prochain créneau (ou créneau en cours)
+    let next = null;
+    const nx = shifts.find((x) => x.at.getTime() + x.dur * 60000 > now.getTime());
+    if (nx) {
+      const ongoing = nx.at <= now;
+      const mins = Math.round((nx.at - now) / 60000);
+      const dayDiff = Math.round((parseDate(nx.e.date) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+      const dayLabel = dayDiff === 0 ? 'Aujourd\'hui' : dayDiff === 1 ? 'Demain'
+        : `${DAYS_LONG[(nx.at.getDay() + 6) % 7]} ${nx.at.getDate()} ${nx.at.toLocaleDateString('fr-FR', { month: 'long' })}`;
+      const later = shifts.filter((x) => x.e.date === nx.e.date && x.at > nx.at);
+      next = {
+        date: nx.e.date, start: fmtTime(nx.e.start), end: fmtTime(nx.e.end), label: nx.e.label || 'Travail',
+        note: nx.e.note || '', ongoing, dayLabel, dur: fmtDur(nx.dur),
+        countdown: ongoing ? `fin à ${fmtTime(nx.e.end)}` : mins < 60 ? `dans ${mins} min`
+          : mins < 36 * 60 ? `dans ${Math.floor(mins / 60)} h${mins % 60 ? ' ' + pad(mins % 60) : ''}` : `dans ${Math.round(mins / 1440)} jours`,
+        progress: ongoing ? Math.min(1, (now - nx.at) / (nx.dur * 60000)) : 0,
+        then: later.map((x) => `${fmtTime(x.e.start)} – ${fmtTime(x.e.end)}`),
+      };
+    }
+
+    // Semaine en cours
+    const monday = mondayOf(now);
+    const mondayKey = iso(monday);
+    const perDay = [0, 0, 0, 0, 0, 0, 0];
+    let hasWeek = false;
+    for (const e of entries) {
+      const d = parseDate(e.date);
+      const i = Math.round((d - monday) / 86400000);
+      if (i < 0 || i > 6) continue;
+      hasWeek = true;
+      perDay[i] += duration(e);
+    }
+    const weekInfo = (p.weeks || []).find((w) => w.start === mondayKey);
+    const contract = weekInfo && weekInfo.contract ? minutes(weekInfo.contract) : 0;
+    const total = perDay.reduce((a, b) => a + b, 0);
+    const todayIdx = (now.getDay() + 6) % 7;
+    const doneMin = shifts
+      .filter((x) => x.at >= monday && x.at < addDays(monday, 7))
+      .reduce((t, x) => t + Math.max(0, Math.min(x.dur, (now - x.at) / 60000)), 0);
+
+    // Aujourd'hui avec l'équipe
+    const team = teams[mondayKey];
+    let today = null;
+    if (team) {
+      const mine = team.people.find((q) => norm(q[0]) === norm(team.me));
+      const mySlots = mine ? (mine[3][todayIdx] || []).filter((s) => !/^CP/i.test(s)).map(parseSlot) : [];
+      const working = team.people.filter((q) => (q[3][todayIdx] || []).some((s) => !/^CP/i.test(s)));
+      const withMe = working
+        .filter((q) => q !== mine)
+        .filter((q) => (q[3][todayIdx] || []).filter((s) => !/^CP/i.test(s)).map(parseSlot)
+          .some((s) => mySlots.some((m) => s.start < m.end && m.start < s.end)))
+        .map((q) => firstName(q[0]));
+      today = { count: working.length, withMe, meWorking: mySlots.length > 0 };
+    }
+
+    const anyTeam = team || teams[Object.keys(teams).sort().pop()];
+    return {
+      name: anyTeam && anyTeam.me ? firstName(anyTeam.me) : '',
+      next,
+      week: { hasData: hasWeek, perDay, total, contract, todayIdx, done: Math.round(doneMin), fmtTotal: fmtDur(total), fmtContract: contract ? fmtDur(contract) : '' },
+      today,
+      empty: !entries.length && !Object.keys(teams).length,
+    };
+  }
+
+  // Ouvre la vue Équipe sur aujourd'hui (depuis l'accueil).
+  function openTeamToday() {
+    const k = teamKeys();
+    const current = iso(mondayOf(new Date()));
+    if (!k.length) return;
+    teamWeek = k.includes(current) ? current : k[k.length - 1];
+    teamDay = teamWeek === current ? (new Date().getDay() + 6) % 7 : 0;
+    setMode('team');
+  }
+
+  return {
+    show, decode, merge, fromTeam, currentWeek, removeWeek, weekLabel, dashboard, openTeamToday,
+    fmtDur, fmtTime, firstName,
+  };
 })();

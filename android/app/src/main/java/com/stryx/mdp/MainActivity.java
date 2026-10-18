@@ -34,7 +34,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Coquille native de StryxMDP : affiche l'appli embarquée (dossier assets) dans une WebView.
+ * Coquille native de Stryx Hub : affiche l'appli embarquée (dossier assets) dans une WebView.
  * Les fichiers sont servis sous https://appassets.androidplatform.net (domaine réservé par Android),
  * ce qui donne un contexte sécurisé pour WebCrypto sans jamais toucher au réseau.
  */
@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private Biometrics biometrics;
     private Updater updater;
+    private PlanningSync planningSync;
     private ValueCallback<Uri[]> fileCallback;
     private String pendingSave;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -82,6 +83,8 @@ public class MainActivity extends Activity {
         updater = new Updater(this, (event, payload) -> web.evaluateJavascript(
                 "window.stryxUpdate && window.stryxUpdate(" + JSONObject.quote(event) + ","
                         + JSONObject.quote(payload) + ")", null));
+        planningSync = new PlanningSync((ok, payload) -> web.evaluateJavascript(
+                "window.stryxSync && window.stryxSync(" + ok + "," + JSONObject.quote(payload) + ")", null));
         web.addJavascriptInterface(new Bridge(), "StryxAndroid");
         web.setWebViewClient(new LocalClient());
         web.setWebChromeClient(new WebChromeClient() {
@@ -259,6 +262,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void installUpdate() {
             handler.post(updater::install);
+        }
+
+        @JavascriptInterface
+        public void fetchPlanning() {
+            planningSync.fetch();
         }
 
         @JavascriptInterface

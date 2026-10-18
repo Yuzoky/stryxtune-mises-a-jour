@@ -16,33 +16,69 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- ===== Icônes (traits 24 px) ===== -->
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.2 12 3.5l8.5 6.7V20a1 1 0 0 1-1 1H15v-6.2H9V21H4.5a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4.5"/><path d="m11.2 11.8 8.3-8.3M16.5 6.5l2.5 2.5M14 9l2 2"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h2M14 14h2M8 17h2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2.5 4.5 13.5H12l-1.5 8 9-11H12z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 6.5h16M9.5 6.5V4.5h5v2M18.5 6.5l-.9 13a1.5 1.5 0 0 1-1.5 1.5H7.9a1.5 1.5 0 0 1-1.5-1.5l-.9-13M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7L20 8.5M20 3.5v5h-5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 19.5 6v5.5c0 4.7-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.8-7.5-9.5V6z"/><path d="m9 12 2.2 2.2L15.5 10"/></symbol>
+    <symbol id="i-finger" viewBox="0 0 24 24"><path d="M5.2 8.6A8 8 0 0 1 18.8 8.6"/><path d="M3.6 12.4a8.6 8.6 0 0 1 .6-2.2"/><path d="M8 20.4a12 12 0 0 1-1.6-6.2 5.6 5.6 0 0 1 11.2 0v.6"/><path d="M12 14.2v.8a10 10 0 0 0 2.2 6.2"/><path d="M9.2 14.2a2.8 2.8 0 0 1 5.6 0v1a7.4 7.4 0 0 0 1 3.6"/><path d="M17.6 18.6a12 12 0 0 0 .6-2.2"/><path d="M6.6 4.8a10.4 10.4 0 0 1 10.8 0"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11.5M7 10.5l5 5 5-5M4.5 20.5h15"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4M7 8.5l5-5 5 5M4.5 20.5h15"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3.1-3.1a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3.1 3.1a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M21.5 20a6 6 0 0 0-3.8-5.6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m20.5 16-4.5-4.5-8.5 8"/></symbol>
+    <symbol id="i-cast" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3.5H6.5a1.5 1.5 0 0 0-1.5 1.5v14a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5z"/><path d="M14 3.5v5h5M8.5 13h7M8.5 16.5h5"/></symbol>
+    <symbol id="i-update" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v8.5M8.5 12.5 12 16l3.5-3.5"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h14.5M15 4.5 18.5 8 15 11.5M20 16H5.5M9 12.5 5.5 16 9 19.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17v.01"/></symbol>
+    <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5V3.5h6v1M8.5 10.5h7M8.5 14h7M8.5 17.5h4"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5c.7 4.4 2.1 5.8 6.5 6.5-4.4.7-5.8 2.1-6.5 6.5-.7-4.4-2.1-5.8-6.5-6.5 4.4-.7 5.8-2.1 6.5-6.5zM18.5 15.5c.3 1.9.9 2.5 2.5 2.8-1.6.3-2.2.9-2.5 2.7-.3-1.8-.9-2.4-2.5-2.7 1.6-.3 2.2-.9 2.5-2.8z"/></symbol>
+  </svg>
+
   <canvas id="stars" aria-hidden="true"></canvas>
+  <div class="aurora" aria-hidden="true"><i></i><i></i></div>
 
   <!-- ===== Bandeau de mise à jour (application Android) ===== -->
-  <div id="update-bar" class="update-bar glass" role="status" hidden>
+  <div id="update-bar" class="update-bar" role="status" hidden>
+    <svg class="ic update-ic"><use href="#i-update"/></svg>
     <div class="update-txt">
       <b id="update-title">Mise à jour disponible</b>
       <span id="update-sub"></span>
     </div>
-    <button class="btn primary" id="update-go" type="button">Mettre à jour</button>
-    <button class="icon-btn" id="update-close" type="button" aria-label="Plus tard">✕</button>
+    <button class="btn primary sm" id="update-go" type="button">Mettre à jour</button>
+    <button class="icon-btn sm" id="update-close" type="button" aria-label="Plus tard"><svg class="ic"><use href="#i-x"/></svg></button>
     <div class="update-progress"><i id="update-progress"></i></div>
   </div>
 
   <!-- ===== Écran verrouillé / création ===== -->
   <section id="lock" class="screen">
     <div class="lock-inner">
-      <img src="icons/icon-512.png" alt="" class="vortex">
+      <div class="logo-wrap"><img src="icons/icon-512.png" alt="" class="logo"></div>
       <h1 class="brand">STRYX<span>HUB</span></h1>
-      <p class="sub" id="lock-sub">MOTS DE PASSE · PLANNING</p>
+      <p class="tagline" id="lock-sub">Mots de passe · Planning</p>
 
-      <form id="lock-form" class="glass lock-card" autocomplete="off">
+      <form id="lock-form" class="card lock-card" autocomplete="off">
         <p id="lock-hint" class="hint"></p>
         <label class="field">
           <span>Mot de passe maître</span>
           <div class="pw-wrap">
             <input id="master" type="password" required minlength="8" autocomplete="current-password" spellcheck="false">
-            <button type="button" class="icon-btn eye" data-toggle="master" aria-label="Afficher">👁</button>
+            <button type="button" class="icon-btn" data-toggle="master" aria-label="Afficher"><svg class="ic"><use href="#i-eye"/></svg></button>
           </div>
         </label>
         <label class="field" id="confirm-field" hidden>
@@ -51,88 +87,233 @@
         </label>
         <div id="strength-master" class="strength" hidden><i></i></div>
         <button class="btn primary" id="lock-btn" type="submit">Déverrouiller</button>
-        <button class="btn bio" id="bio-btn" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" class="fp" aria-hidden="true"><path d="M5.2 8.6A8 8 0 0 1 18.8 8.6"/><path d="M3.6 12.4a8.6 8.6 0 0 1 .6-2.2"/><path d="M8 20.4a12 12 0 0 1-1.6-6.2 5.6 5.6 0 0 1 11.2 0v.6"/><path d="M12 14.2v.8a10 10 0 0 0 2.2 6.2"/><path d="M9.2 14.2a2.8 2.8 0 0 1 5.6 0v1a7.4 7.4 0 0 0 1 3.6"/><path d="M17.6 18.6a12 12 0 0 0 .6-2.2"/><path d="M6.6 4.8a10.4 10.4 0 0 1 10.8 0"/><path d="M11 20.8a14 14 0 0 1-1.6-5.4"/></svg> Empreinte digitale</button>
+        <button class="btn bio" id="bio-btn" type="button" hidden><svg class="ic"><use href="#i-finger"/></svg> Empreinte digitale</button>
         <p id="lock-error" class="error" role="alert"></p>
       </form>
-      <button id="install-btn" class="btn install" type="button" hidden>📲 Installer l'appli sur l'écran d'accueil</button>
+      <button id="install-btn" class="btn ghost" type="button" hidden><svg class="ic"><use href="#i-download"/></svg> Installer l'appli sur l'écran d'accueil</button>
       <button id="restore-btn" class="link" type="button">Restaurer une sauvegarde</button>
     </div>
   </section>
 
-  <!-- ===== Coffre ===== -->
+  <!-- ===== Application ===== -->
   <section id="vault" class="screen" hidden>
-    <header class="topbar">
-      <div class="brand-sm"><img src="icons/icon-192.png" alt="">STRYX<span>HUB</span></div>
-      <button class="icon-btn" id="settings-btn" aria-label="Paramètres">⚙</button>
-      <button class="icon-btn" id="lock-now" aria-label="Verrouiller">🔒</button>
+    <header class="appbar">
+      <div class="appbar-titles">
+        <small id="page-kicker"></small>
+        <h1 id="page-title">Accueil</h1>
+      </div>
+      <button class="icon-btn" id="lock-now" aria-label="Verrouiller"><svg class="ic"><use href="#i-lock"/></svg></button>
     </header>
 
-    <nav class="tabs glass" role="tablist">
-      <button class="tab active" role="tab" data-tab="pw">🔑 Mots de passe</button>
-      <button class="tab" role="tab" data-tab="plan">📅 Planning</button>
-    </nav>
+    <main>
+      <!-- ----- Accueil ----- -->
+      <div class="page" id="page-home" data-title="Accueil">
+        <button class="card hero" id="home-next" type="button"></button>
 
-    <div id="tab-pw">
-    <div class="search glass">
-      <span>⌕</span>
-      <input id="search" type="search" placeholder="Rechercher…" autocomplete="off" spellcheck="false">
-    </div>
+        <div class="grid2">
+          <button class="card week-card" id="home-week" type="button">
+            <div class="ring-wrap">
+              <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="ring-bg" cx="50" cy="50" r="42"/>
+                <circle class="ring-fg" id="home-ring" cx="50" cy="50" r="42"/>
+              </svg>
+              <div class="ring-txt"><b id="home-hours">0h</b><small id="home-contract"></small></div>
+            </div>
+            <div class="bars" id="home-bars"></div>
+          </button>
 
-    <nav class="chips" id="chips"></nav>
-
-    <div class="stats" id="stats"></div>
-    <ul id="list" class="list"></ul>
-    <div id="empty" class="empty" hidden>
-      <p>Aucun mot de passe enregistré.</p>
-      <p class="muted">Touchez <b>⚡ Générer</b> pour créer un mot de passe solide, ou <b>+</b> pour en ajouter un.</p>
-    </div>
-
-    <button class="quick-gen" id="quick-gen">⚡ Générer un mot de passe</button>
-    <button class="fab" id="add-btn" aria-label="Ajouter">+</button>
-    </div>
-
-    <!-- ===== Page Planning ===== -->
-    <div id="tab-plan" hidden>
-      <nav class="plan-mode" id="plan-mode" hidden>
-        <button class="active" data-mode="me">Mon planning</button>
-        <button data-mode="team">👥 Équipe</button>
-      </nav>
-
-      <div id="plan-team" hidden>
-        <div class="week-nav">
-          <button class="icon-btn" id="team-prev" aria-label="Semaine précédente">‹</button>
-          <div class="week-label"><b id="team-title"></b><span id="team-sub"></span></div>
-          <button class="icon-btn" id="team-next" aria-label="Semaine suivante">›</button>
+          <button class="card team-card" id="home-team" type="button">
+            <svg class="ic card-ic"><use href="#i-users"/></svg>
+            <b id="home-team-count">—</b>
+            <span id="home-team-sub">Ajoute un planning d'équipe</span>
+          </button>
         </div>
-        <div class="day-strip" id="day-strip"></div>
-        <div class="team-sum" id="team-sum"></div>
-        <div class="timeline glass" id="timeline"></div>
-        <div class="rest-list" id="rest-list"></div>
+
+        <div class="card vault-card">
+          <div class="vault-head">
+            <div>
+              <small class="kicker">Coffre</small>
+              <b id="home-vault-count">0 identifiant</b>
+              <span id="home-vault-health" class="muted"></span>
+            </div>
+            <div class="health" id="home-health"><i></i></div>
+          </div>
+          <div class="quick">
+            <button class="btn" id="home-gen" type="button"><svg class="ic"><use href="#i-bolt"/></svg> Générer</button>
+            <button class="btn" id="home-add" type="button"><svg class="ic"><use href="#i-plus"/></svg> Ajouter</button>
+          </div>
+        </div>
+
+        <button class="sync-line" id="home-sync" type="button"></button>
       </div>
 
-      <div id="plan-me">
-      <div class="week-nav">
-        <button class="icon-btn" id="week-prev" aria-label="Semaine précédente">‹</button>
-        <div class="week-label"><b id="week-title"></b><span id="week-sub"></span></div>
-        <button class="icon-btn" id="week-next" aria-label="Semaine suivante">›</button>
+      <!-- ----- Mots de passe ----- -->
+      <div class="page" id="page-pw" data-title="Mots de passe" hidden>
+        <div class="search">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <input id="search" type="search" placeholder="Rechercher un site, un identifiant…" autocomplete="off" spellcheck="false">
+        </div>
+        <nav class="chips" id="chips"></nav>
+        <div class="stats" id="stats"></div>
+        <ul id="list" class="list"></ul>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-ic"><svg class="ic"><use href="#i-key"/></svg></div>
+          <p>Aucun mot de passe enregistré.</p>
+          <p class="muted">Touche <b>Générer</b> pour créer un mot de passe solide, ou <b>+</b> pour en ajouter un.</p>
+        </div>
+        <div class="pw-actions">
+          <button class="quick-gen" id="quick-gen" type="button"><svg class="ic"><use href="#i-bolt"/></svg> Générer un mot de passe</button>
+          <button class="fab" id="add-btn" type="button" aria-label="Ajouter"><svg class="ic"><use href="#i-plus"/></svg></button>
+        </div>
       </div>
-      <button class="chip today-chip" id="week-today" hidden>↺ Revenir à cette semaine</button>
-      <div class="plan-next glass" id="plan-next" hidden></div>
-      <ul class="days" id="days"></ul>
+
+      <!-- ----- Planning ----- -->
+      <div class="page" id="page-plan" data-title="Planning" hidden>
+        <nav class="seg" id="plan-mode" hidden>
+          <button class="active" data-mode="me" type="button">Mon planning</button>
+          <button data-mode="team" type="button"><svg class="ic"><use href="#i-users"/></svg> Équipe</button>
+        </nav>
+
+        <div id="plan-team" hidden>
+          <div class="week-nav">
+            <button class="icon-btn" id="team-prev" aria-label="Semaine précédente"><svg class="ic"><use href="#i-chev-l"/></svg></button>
+            <div class="week-label"><b id="team-title"></b><span id="team-sub"></span></div>
+            <button class="icon-btn" id="team-next" aria-label="Semaine suivante"><svg class="ic"><use href="#i-chev-r"/></svg></button>
+          </div>
+          <div class="day-strip" id="day-strip"></div>
+          <div class="team-sum" id="team-sum"></div>
+          <div class="timeline card" id="timeline"></div>
+          <div class="rest-list" id="rest-list"></div>
+        </div>
+
+        <div id="plan-me">
+          <div class="week-nav">
+            <button class="icon-btn" id="week-prev" aria-label="Semaine précédente"><svg class="ic"><use href="#i-chev-l"/></svg></button>
+            <div class="week-label"><b id="week-title"></b><span id="week-sub"></span></div>
+            <button class="icon-btn" id="week-next" aria-label="Semaine suivante"><svg class="ic"><use href="#i-chev-r"/></svg></button>
+          </div>
+          <button class="chip today-chip" id="week-today" type="button" hidden>Revenir à cette semaine</button>
+          <div class="plan-next card" id="plan-next" hidden></div>
+          <ul class="days" id="days"></ul>
+        </div>
+
+        <div class="empty" id="plan-empty" hidden>
+          <div class="empty-ic"><svg class="ic"><use href="#i-calendar"/></svg></div>
+          <p>Aucun planning pour l'instant.</p>
+          <p class="muted">Connecte le <b>planning automatique</b> une fois : Claude l'enverra ensuite directement ici.</p>
+        </div>
+
+        <div class="plan-tools">
+          <button class="btn" id="plan-sync-btn" type="button"><svg class="ic"><use href="#i-refresh"/></svg> <span id="plan-sync-label">Planning automatique</span></button>
+          <button class="btn" id="plan-import" type="button"><svg class="ic"><use href="#i-clipboard"/></svg> Coller un code</button>
+        </div>
+        <button class="btn danger plan-remove" id="plan-remove" type="button" hidden></button>
+        <p class="muted small plan-foot" id="plan-foot"></p>
       </div>
-      <div class="empty" id="plan-empty" hidden>
-        <p>Aucun planning pour l'instant.</p>
-        <p class="muted">Envoie une photo de ton planning à Claude : il te donnera un <b>code planning</b> à coller ici.</p>
+
+      <!-- ----- Réglages ----- -->
+      <div class="page" id="page-settings" data-title="Réglages" hidden>
+        <h3 class="set-title">Planning</h3>
+        <div class="set-group">
+          <button class="set-item" id="s-sync" type="button">
+            <span class="si-ic accent"><svg class="ic"><use href="#i-link"/></svg></span>
+            <span class="si-txt"><b id="s-sync-title">Planning automatique</b><small id="s-sync-sub"></small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+          <button class="set-item" id="s-plancode" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-clipboard"/></svg></span>
+            <span class="si-txt"><b>Coller un code planning</b><small>Si Claude t'a envoyé un code STRYXPLAN</small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+        </div>
+
+        <h3 class="set-title">Sécurité</h3>
+        <div class="set-group">
+          <button class="set-item" id="s-bio" type="button" hidden>
+            <span class="si-ic"><svg class="ic"><use href="#i-finger"/></svg></span>
+            <span class="si-txt"><b id="s-bio-title">Empreinte digitale</b><small id="s-bio-sub"></small></span>
+            <span class="switch" id="s-bio-switch"></span>
+          </button>
+          <label class="set-item" for="s-autolock">
+            <span class="si-ic"><svg class="ic"><use href="#i-clock"/></svg></span>
+            <span class="si-txt"><b>Verrouillage auto</b><small>Après un moment sans utiliser l'appli</small></span>
+            <select id="s-autolock">
+              <option value="60">1 min</option>
+              <option value="300">5 min</option>
+              <option value="900">15 min</option>
+              <option value="0">Jamais</option>
+            </select>
+          </label>
+          <button class="set-item" id="s-change" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-key"/></svg></span>
+            <span class="si-txt"><b>Mot de passe maître</b><small>Le changer (rechiffre tout le coffre)</small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+          <button class="set-item" id="s-screen" type="button" hidden>
+            <span class="si-ic"><svg class="ic"><use href="#i-cast"/></svg></span>
+            <span class="si-txt"><b id="s-screen-title">Protection d'écran</b><small id="s-screen-sub"></small></span>
+            <span class="switch" id="s-screen-switch"></span>
+          </button>
+        </div>
+
+        <h3 class="set-title">Données</h3>
+        <div class="set-group">
+          <button class="set-item" id="s-csv" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-file"/></svg></span>
+            <span class="si-txt"><b>Importer des mots de passe (CSV)</b><small>Google, Chrome, Brave, Firefox, Bitwarden…</small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+          <button class="set-item" id="s-export" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-download"/></svg></span>
+            <span class="si-txt"><b>Exporter une sauvegarde</b><small>Fichier chiffré : mots de passe + planning</small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+          <button class="set-item" id="s-import" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-upload"/></svg></span>
+            <span class="si-txt"><b>Importer une sauvegarde</b><small>Remplace le coffre actuel</small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+        </div>
+
+        <h3 class="set-title">Affichage</h3>
+        <div class="set-group">
+          <button class="set-item" id="s-icons" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-image"/></svg></span>
+            <span class="si-txt"><b id="s-icons-title">Logos des sites</b><small id="s-icons-sub"></small></span>
+            <span class="switch" id="s-icons-switch"></span>
+          </button>
+        </div>
+
+        <h3 class="set-title">Application</h3>
+        <div class="set-group">
+          <button class="set-item" id="s-update" type="button" hidden>
+            <span class="si-ic"><svg class="ic"><use href="#i-update"/></svg></span>
+            <span class="si-txt"><b>Mises à jour</b><small id="s-update-sub"></small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+          <button class="set-item danger" id="s-wipe" type="button">
+            <span class="si-ic"><svg class="ic"><use href="#i-trash"/></svg></span>
+            <span class="si-txt"><b>Effacer le coffre</b><small>Supprime toutes les données de ce téléphone</small></span>
+            <svg class="ic si-chev"><use href="#i-chev-r"/></svg>
+          </button>
+        </div>
+
+        <p class="muted small set-foot"><svg class="ic"><use href="#i-shield"/></svg> Tout est chiffré sur ce téléphone (AES-256-GCM). Sans le mot de passe maître, personne ne peut lire ton coffre, pas même Claude.</p>
       </div>
-      <button class="btn plan-import" id="plan-import" type="button">📋 Coller un code planning</button>
-      <button class="btn danger plan-remove" id="plan-remove" type="button" hidden></button>
-      <p class="muted small plan-foot" id="plan-foot"></p>
-    </div>
+    </main>
+
+    <!-- ----- Barre de navigation ----- -->
+    <nav class="tabbar" id="tabbar">
+      <button class="tab active" data-page="home" type="button"><svg class="ic"><use href="#i-home"/></svg><span>Accueil</span></button>
+      <button class="tab" data-page="pw" type="button"><svg class="ic"><use href="#i-key"/></svg><span>Mots de passe</span></button>
+      <button class="tab" data-page="plan" type="button"><svg class="ic"><use href="#i-calendar"/></svg><span>Planning</span></button>
+      <button class="tab" data-page="settings" type="button"><svg class="ic"><use href="#i-sliders"/></svg><span>Réglages</span></button>
+    </nav>
   </section>
 
   <!-- ===== Feuille : ajout / modification ===== -->
   <div class="sheet" id="edit-sheet" hidden>
-    <form class="sheet-body glass" id="edit-form" autocomplete="off">
+    <form class="sheet-body" id="edit-form" autocomplete="off">
       <div class="grab"></div>
       <h2 id="edit-title">Nouvel identifiant</h2>
       <label class="field"><span>Nom / site</span><input id="f-title" required maxlength="100" placeholder="Steam, Discord, Riot…"></label>
@@ -140,8 +321,8 @@
       <label class="field"><span>Mot de passe</span>
         <div class="pw-wrap">
           <input id="f-pass" type="password" maxlength="500" autocapitalize="off" spellcheck="false" autocomplete="new-password">
-          <button type="button" class="icon-btn eye" data-toggle="f-pass" aria-label="Afficher">👁</button>
-          <button type="button" class="icon-btn" id="gen-open" aria-label="Générer">⚡</button>
+          <button type="button" class="icon-btn" data-toggle="f-pass" aria-label="Afficher"><svg class="ic"><use href="#i-eye"/></svg></button>
+          <button type="button" class="icon-btn accent" id="gen-open" aria-label="Générer"><svg class="ic"><use href="#i-bolt"/></svg></button>
         </div>
       </label>
       <div id="strength-f" class="strength"><i></i></div>
@@ -160,16 +341,16 @@
 
   <!-- ===== Feuille : détail ===== -->
   <div class="sheet" id="view-sheet" hidden>
-    <div class="sheet-body glass">
+    <div class="sheet-body">
       <div class="grab"></div>
       <div class="view-head">
-        <div class="avatar" id="v-avatar"></div>
+        <div class="avatar lg" id="v-avatar"></div>
         <div><h2 id="v-title"></h2><p class="muted" id="v-cat"></p></div>
       </div>
-      <div class="kv"><span>Identifiant</span><b id="v-user"></b><button class="icon-btn" data-copy="user" aria-label="Copier">⧉</button></div>
+      <div class="kv"><span>Identifiant</span><b id="v-user"></b><button class="icon-btn sm" data-copy="user" aria-label="Copier l'identifiant"><svg class="ic"><use href="#i-copy"/></svg></button></div>
       <div class="kv"><span>Mot de passe</span><b id="v-pass" class="mono">••••••••</b>
-        <button class="icon-btn" id="v-eye" aria-label="Afficher">👁</button>
-        <button class="icon-btn" data-copy="pass" aria-label="Copier">⧉</button></div>
+        <button class="icon-btn sm" id="v-eye" aria-label="Afficher"><svg class="ic"><use href="#i-eye"/></svg></button>
+        <button class="icon-btn sm" data-copy="pass" aria-label="Copier le mot de passe"><svg class="ic"><use href="#i-copy"/></svg></button></div>
       <div class="kv" id="v-url-row"><span>Site</span><a id="v-url" target="_blank" rel="noopener noreferrer"></a></div>
       <div class="kv notes" id="v-notes-row"><span>Notes</span><p id="v-notes"></p></div>
       <p class="muted small" id="v-date"></p>
@@ -182,7 +363,7 @@
 
   <!-- ===== Feuille : générateur ===== -->
   <div class="sheet" id="gen-sheet" hidden>
-    <div class="sheet-body glass">
+    <div class="sheet-body">
       <div class="grab"></div>
       <h2>Générateur</h2>
       <div class="gen-out mono" id="gen-out" role="button" title="Toucher pour copier"></div>
@@ -195,43 +376,48 @@
         <label><input type="checkbox" id="g-sym" checked> !@#</label>
       </div>
       <div class="row">
-        <button class="btn" id="gen-again" aria-label="Regénérer">↻</button>
+        <button class="btn" id="gen-again" aria-label="Regénérer"><svg class="ic"><use href="#i-refresh"/></svg></button>
         <button class="btn" id="gen-copy">Copier</button>
         <button class="btn primary" id="gen-use">Utiliser</button>
       </div>
     </div>
   </div>
 
-  <!-- ===== Feuille : paramètres ===== -->
-  <div class="sheet" id="settings-sheet" hidden>
-    <div class="sheet-body glass">
+  <!-- ===== Feuille : planning automatique ===== -->
+  <div class="sheet" id="sync-sheet" hidden>
+    <div class="sheet-body">
       <div class="grab"></div>
-      <h2>Paramètres</h2>
-      <label class="field"><span>Verrouillage auto</span>
-        <select id="s-autolock">
-          <option value="60">1 minute</option>
-          <option value="300">5 minutes</option>
-          <option value="900">15 minutes</option>
-          <option value="0">Jamais (déconseillé)</option>
-        </select>
-      </label>
-      <button class="tile glass" id="s-icons"><b id="s-icons-title"></b><span id="s-icons-sub"></span></button>
-      <button class="tile glass" id="s-screen" hidden><b id="s-screen-title"></b><span id="s-screen-sub"></span></button>
-      <button class="tile glass" id="s-bio" hidden><b id="s-bio-title">Empreinte digitale</b><span id="s-bio-sub"></span></button>
-      <button class="tile glass" id="s-update" hidden><b>Mises à jour</b><span id="s-update-sub"></span></button>
-      <button class="tile glass" id="s-csv"><b>Importer des mots de passe (CSV)</b><span>Depuis Google / Chrome, Brave, Firefox, Bitwarden, LastPass…</span></button>
-      <button class="tile glass" id="s-export"><b>Exporter une sauvegarde</b><span>Fichier chiffré avec votre mot de passe maître</span></button>
-      <button class="tile glass" id="s-import"><b>Importer une sauvegarde</b><span>Remplace le coffre actuel</span></button>
-      <button class="tile glass" id="s-change"><b>Changer le mot de passe maître</b><span>Rechiffre tout le coffre</span></button>
-      <button class="tile glass danger" id="s-wipe"><b>Effacer le coffre</b><span>Supprime toutes les données de cet appareil</span></button>
-      <p class="muted small">Stryx Hub fonctionne 100 % hors ligne. Vos données restent sur ce téléphone, chiffrées en AES-256-GCM. Sans le mot de passe maître, elles sont irrécupérables.</p>
-      <div class="row"><button class="btn" data-close>Fermer</button></div>
+      <div class="sheet-ic accent"><svg class="ic"><use href="#i-link"/></svg></div>
+      <h2 class="center">Planning automatique</h2>
+      <div id="sync-off">
+        <p class="muted center">Claude envoie ton planning <b>directement dans l'appli</b> : plus besoin de coller de code. Il est chiffré pour <b>ce téléphone uniquement</b>, personne d'autre ne peut le lire.</p>
+        <ol class="steps">
+          <li>Touche <b>Connecter ce téléphone</b>.</li>
+          <li>Copie le code de liaison et envoie-le à Claude <b>une seule fois</b>.</li>
+          <li>Ensuite, chaque nouveau planning arrive tout seul à l'ouverture de l'appli.</li>
+        </ol>
+      </div>
+      <div id="sync-on" hidden>
+        <p class="muted small" id="sync-intro">Envoie ce code à Claude <b>une seule fois</b> (c'est une clé publique, elle ne permet pas de lire ton coffre) :</p>
+        <div class="code-box mono" id="sync-code" role="button" title="Toucher pour copier"></div>
+        <div class="sync-state" id="sync-status"></div>
+      </div>
+      <p id="sync-error" class="error" role="alert"></p>
+      <div class="row" id="sync-actions-off">
+        <button type="button" class="btn" data-close>Plus tard</button>
+        <button type="button" class="btn primary" id="sync-link">Connecter ce téléphone</button>
+      </div>
+      <div class="row" id="sync-actions-on" hidden>
+        <button type="button" class="btn danger" id="sync-unlink" aria-label="Déconnecter"><svg class="ic"><use href="#i-trash"/></svg></button>
+        <button type="button" class="btn" id="sync-copy"><svg class="ic"><use href="#i-copy"/></svg> Copier le code</button>
+        <button type="button" class="btn primary" id="sync-refresh"><svg class="ic"><use href="#i-refresh"/></svg> Actualiser</button>
+      </div>
     </div>
   </div>
 
   <!-- ===== Feuille : changement du mot de passe maître ===== -->
   <div class="sheet" id="pw-sheet" hidden>
-    <form class="sheet-body glass" id="pw-form" autocomplete="off">
+    <form class="sheet-body" id="pw-form" autocomplete="off">
       <div class="grab"></div>
       <h2>Mot de passe maître</h2>
       <label class="field"><span>Actuel</span><input id="pw-old" type="password" required autocomplete="current-password"></label>
@@ -248,13 +434,13 @@
 
   <!-- ===== Feuille : installation iPhone ===== -->
   <div class="sheet" id="ios-sheet" hidden>
-    <div class="sheet-body glass">
+    <div class="sheet-body">
       <div class="grab"></div>
       <h2>Ajouter Stryx Hub à l'écran d'accueil</h2>
       <ol class="steps">
-        <li>Touchez le bouton <b>Partager</b> en bas de Safari.</li>
-        <li>Faites défiler et choisissez <b>Sur l'écran d'accueil</b>.</li>
-        <li>Touchez <b>Ajouter</b> : l'icône Stryx Hub apparaît sur votre téléphone.</li>
+        <li>Touche le bouton <b>Partager</b> en bas de Safari.</li>
+        <li>Fais défiler et choisis <b>Sur l'écran d'accueil</b>.</li>
+        <li>Touche <b>Ajouter</b> : l'icône Stryx Hub apparaît sur ton téléphone.</li>
       </ol>
       <p class="muted small">Sur iPhone, l'installation n'est possible que depuis Safari.</p>
       <div class="row"><button class="btn primary" data-close>Compris</button></div>
@@ -263,11 +449,11 @@
 
   <!-- ===== Feuille : activer l'empreinte ===== -->
   <div class="sheet" id="bio-sheet" hidden>
-    <form class="sheet-body glass" id="bio-form" autocomplete="off">
+    <form class="sheet-body" id="bio-form" autocomplete="off">
       <div class="grab"></div>
-      <div class="bio-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" class="fp" aria-hidden="true"><path d="M5.2 8.6A8 8 0 0 1 18.8 8.6"/><path d="M3.6 12.4a8.6 8.6 0 0 1 .6-2.2"/><path d="M8 20.4a12 12 0 0 1-1.6-6.2 5.6 5.6 0 0 1 11.2 0v.6"/><path d="M12 14.2v.8a10 10 0 0 0 2.2 6.2"/><path d="M9.2 14.2a2.8 2.8 0 0 1 5.6 0v1a7.4 7.4 0 0 0 1 3.6"/><path d="M17.6 18.6a12 12 0 0 0 .6-2.2"/><path d="M6.6 4.8a10.4 10.4 0 0 1 10.8 0"/><path d="M11 20.8a14 14 0 0 1-1.6-5.4"/></svg></div>
-      <h2>Déverrouiller avec l'empreinte ?</h2>
-      <p class="muted">Ouvrez Stryx Hub d'un simple toucher du doigt. Votre mot de passe maître reste chiffré par la puce de sécurité du téléphone, et seule une empreinte enregistrée peut le débloquer.</p>
+      <div class="sheet-ic"><svg class="ic"><use href="#i-finger"/></svg></div>
+      <h2 class="center">Déverrouiller avec l'empreinte ?</h2>
+      <p class="muted center">Ouvre Stryx Hub d'un simple toucher du doigt. Ton mot de passe maître reste chiffré par la puce de sécurité du téléphone, et seule une empreinte enregistrée peut le débloquer.</p>
       <label class="field" id="bio-pw-field"><span>Mot de passe maître</span><input id="bio-pw" type="password" autocomplete="current-password"></label>
       <p id="bio-error" class="error" role="alert"></p>
       <div class="row">
@@ -279,13 +465,13 @@
 
   <!-- ===== Feuille : import CSV ===== -->
   <div class="sheet" id="csv-sheet" hidden>
-    <div class="sheet-body glass">
+    <div class="sheet-body">
       <div class="grab"></div>
       <h2>Importer des mots de passe</h2>
       <div id="csv-intro">
-        <p class="muted small">Exportez vos mots de passe en fichier <b>.csv</b> depuis votre ancien gestionnaire, puis choisissez-le ici. Ils seront ajoutés à votre coffre (rien n'est supprimé).</p>
+        <p class="muted small">Exporte tes mots de passe en fichier <b>.csv</b> depuis ton ancien gestionnaire, puis choisis-le ici. Ils seront ajoutés au coffre (rien n'est supprimé).</p>
         <ul class="csv-help small">
-          <li><b>Google / Chrome</b> : passwords.google.com › ⚙ Paramètres › Exporter</li>
+          <li><b>Google / Chrome</b> : passwords.google.com › Paramètres › Exporter</li>
           <li><b>Brave</b> : Paramètres › Mots de passe › ⋮ › Exporter les mots de passe</li>
           <li><b>Firefox</b> : about:logins › ⋯ › Exporter les identifiants</li>
           <li><b>Bitwarden, LastPass, 1Password, Dashlane, Proton Pass</b> : Exporter au format CSV</li>
@@ -294,7 +480,7 @@
       <div id="csv-result" hidden>
         <p class="csv-count"><b id="csv-n"></b><span id="csv-detail" class="muted"></span></p>
         <ul class="csv-preview" id="csv-preview"></ul>
-        <p class="warn small">⚠ Après l'import, supprimez le fichier CSV du téléphone : il contient vos mots de passe en clair.</p>
+        <p class="warn small"><svg class="ic"><use href="#i-alert"/></svg> Après l'import, supprime le fichier CSV du téléphone : il contient tes mots de passe en clair.</p>
       </div>
       <p id="csv-error" class="error" role="alert"></p>
       <div class="row">
@@ -307,10 +493,10 @@
 
   <!-- ===== Feuille : coller un code planning ===== -->
   <div class="sheet" id="plan-sheet" hidden>
-    <form class="sheet-body glass" id="plan-form" autocomplete="off">
+    <form class="sheet-body" id="plan-form" autocomplete="off">
       <div class="grab"></div>
-      <h2>Ajouter un planning</h2>
-      <p class="muted small">Collez le code planning envoyé par Claude. Il est enregistré uniquement sur ce téléphone, chiffré dans votre coffre.</p>
+      <h2>Coller un code planning</h2>
+      <p class="muted small">Colle le code envoyé par Claude. Il est enregistré uniquement sur ce téléphone, chiffré dans ton coffre. Si la même semaine existe déjà, elle est remplacée.</p>
       <textarea id="plan-code" rows="5" class="mono" placeholder="STRYXPLAN:…" spellcheck="false" autocapitalize="off"></textarea>
       <p id="plan-error" class="error" role="alert"></p>
       <p class="muted small" id="plan-version"></p>
@@ -328,6 +514,7 @@
 
   <script src="crypto.js"></script>
   <script src="importcsv.js"></script>
+  <script src="sync.js"></script>
   <script src="planning.js"></script>
   <script src="app.js"></script>
 </body>
