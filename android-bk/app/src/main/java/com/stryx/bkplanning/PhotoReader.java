@@ -134,6 +134,13 @@ final class PhotoReader {
                     float scale = savePreview(bmp, new File(previewDir(activity), name));
                     JSONObject page = new JSONObject();
                     page.put("ocr", toJson(best, bmp.getWidth(), bmp.getHeight()));
+                    // 2e lecture en 4 morceaux qui se chevauchent : le petit texte d'un tableau
+                    // chargé est mieux lu. L'appli garde, ligne par ligne, la lecture qui tombe juste.
+                    try {
+                        page.put("tiled", tiled(recognizer, bmp));
+                    } catch (Exception | OutOfMemoryError ignored) {
+                        // Pas grave : la lecture entière suffit.
+                    }
                     page.put("src", "/photo/" + name);
                     page.put("scale", scale);
                     callback.event("page", page.toString());
@@ -238,28 +245,33 @@ final class PhotoReader {
 
     private static JSONObject toJson(Text text, int w, int h) throws Exception {
         JSONArray lines = new JSONArray();
-        for (Text.TextBlock block : text.getTextBlocks()) {
-            for (Text.Line line : block.getLines()) {
-                Rect lb = line.getBoundingBox();
-                if (lb == null) continue;
-                JSONObject l = new JSONObject();
-                l.put("t", line.getText());
-                l.put("b", rect(lb));
-                JSONArray lc = corners(line.getCornerPoints());
-                if (lc != null) l.put("c", lc);
-                JSONArray els = new JSONArray();
-                for (Text.Element e : line.getElements()) {
-                    Rect eb = e.getBoundingBox();
-                    if (eb == null) continue;
-                    JSONObject o = new JSONObject();
-                    o.put("t", e.getText());
-                    o.put("b", rect(eb));
-                    JSONArray ec = corners(e.getCornerPoints());
-                    if (ec != null) o.put("c", ec);
-                    els.put(o);
+        addLines(lines, text, 0, 0, null);
+        JSONObject out = new JSONObject();
+        out.put("w", w);
+        out.put("h", h);
+        out.put("lines", lines);
+        return out;
+    }
+
+    /** Lecture en 2 × 2 morceaux (20 % de recouvrement), remise en coordonnées de la photo. */
+    private JSONObject tiled(TextRecognizer recognizer, Bitmap bmp) throws Exception {
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        int tw = (w + w / 5) / 2;
+        int th = (h + h / 5) / 2;
+        JSONArray lines = new JSONArray();
+        for (int r = 0; r < 2; r++) {
+            for (int c = 0; c < 2; c++) {
+                int x = c == 0 ? 0 : w - tw;
+                int y = r == 0 ? 0 : h - th;
+                // Chaque mot n'est gardé que dans le morceau où tombe son centre : pas de doublon.
+                Rect core = new Rect(c == 0 ? 0 : w / 2, r == 0 ? 0 : h / 2, c == 0 ? w / 2 : w, r == 0 ? h / 2 : h);
+                Bitmap tile = Bitmap.createBitmap(bmp, x, y, tw, th);
+                try {
+                    addLines(lines, recognize(recognizer, tile), x, y, core);
+                } finally {
+                    tile.recycle();
                 }
-                l.put("e", els);
-                lines.put(l);
             }
         }
         JSONObject out = new JSONObject();
@@ -269,14 +281,55 @@ final class PhotoReader {
         return out;
     }
 
-    private static JSONArray rect(Rect r) {
-        return new JSONArray().put(r.left).put(r.top).put(r.right).put(r.bottom);
+    /** Lignes reconnues → JSON, décalées de (dx, dy) ; si core, seuls les mots dont le centre y est. */
+    private static void addLines(JSONArray lines, Text text, int dx, int dy, Rect core) throws Exception {
+        for (Text.TextBlock block : text.getTextBlocks()) {
+            for (Text.Line line : block.getLines()) {
+                Rect lb = line.getBoundingBox();
+                if (lb == null) continue;
+                JSONArray els = new JSONArray();
+                StringBuilder sb = new StringBuilder();
+                int l = Integer.MAX_VALUE, t = Integer.MAX_VALUE, rr = Integer.MIN_VALUE, bb = Integer.MIN_VALUE;
+                int all = 0;
+                for (Text.Element e : line.getElements()) {
+                    Rect eb = e.getBoundingBox();
+                    if (eb == null) continue;
+                    all++;
+                    if (core != null && !core.contains(eb.centerX() + dx, eb.centerY() + dy)) continue;
+                    JSONObject o = new JSONObject();
+                    o.put("t", e.getText());
+                    o.put("b", rect(eb, dx, dy));
+                    JSONArray ec = corners(e.getCornerPoints(), dx, dy);
+                    if (ec != null) o.put("c", ec);
+                    els.put(o);
+                    if (sb.length() > 0) sb.append(' ');
+                    sb.append(e.getText());
+                    l = Math.min(l, eb.left + dx);
+                    t = Math.min(t, eb.top + dy);
+                    rr = Math.max(rr, eb.right + dx);
+                    bb = Math.max(bb, eb.bottom + dy);
+                }
+                if (els.length() == 0) continue;
+                JSONObject o = new JSONObject();
+                boolean whole = els.length() == all;
+                o.put("t", whole ? line.getText() : sb.toString());
+                o.put("b", whole ? rect(lb, dx, dy) : new JSONArray().put(l).put(t).put(rr).put(bb));
+                JSONArray lc = whole ? corners(line.getCornerPoints(), dx, dy) : null;
+                if (lc != null) o.put("c", lc);
+                o.put("e", els);
+                lines.put(o);
+            }
+        }
     }
 
-    private static JSONArray corners(Point[] pts) {
+    private static JSONArray rect(Rect r, int dx, int dy) {
+        return new JSONArray().put(r.left + dx).put(r.top + dy).put(r.right + dx).put(r.bottom + dy);
+    }
+
+    private static JSONArray corners(Point[] pts, int dx, int dy) {
         if (pts == null || pts.length != 4) return null;
         JSONArray a = new JSONArray();
-        for (Point p : pts) a.put(p.x).put(p.y);
+        for (Point p : pts) a.put(p.x + dx).put(p.y + dy);
         return a;
     }
 }

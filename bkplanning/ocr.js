@@ -800,7 +800,20 @@ const SheetReader = (() => {
     return out;
   }
 
-  return { read, parseCell, parsePlan, mergePages, check, nameOf, slotMinutes, timesIn, hhmm, toMin };
+  // Deux lectures de la même photo (entière, et en morceaux) : on part de la meilleure et on
+  // remplace chaque ligne douteuse par la même ligne de l'autre lecture si elle, tombe juste.
+  function combine(a, b) {
+    const score = (r) => (r && r.ok ? r.people.filter((p) => p.ok).length * 1000 + r.people.length : -1);
+    if (!b || !b.ok) return a;
+    if (!a || !a.ok) return b;
+    const [best, other] = score(b) > score(a) ? [b, a] : [a, b];
+    const key = (p) => (p.id ? `#${p.id}` : deaccent(p.name).toLowerCase().replace(/[^a-z]/g, ''));
+    const alt = new Map(other.people.filter((p) => p.ok).map((p) => [key(p), p]));
+    const people = best.people.map((p) => (!p.ok && alt.has(key(p)) ? alt.get(key(p)) : p));
+    return { ...best, people, week: best.week || other.week, weekSource: best.weekSource || other.weekSource, totals: best.totals || other.totals };
+  }
+
+  return { read, combine, parseCell, parsePlan, mergePages, check, nameOf, slotMinutes, timesIn, hhmm, toMin };
 })();
 
 if (typeof module !== 'undefined') module.exports = SheetReader;

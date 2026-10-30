@@ -894,7 +894,7 @@
     } else if (event === 'page') {
       let data;
       try { data = JSON.parse(payload); } catch { return; }
-      const result = SheetReader.read(data.ocr);
+      const result = SheetReader.combine(SheetReader.read(data.ocr), data.tiled ? SheetReader.read(data.tiled) : null);
       if (!result.ok || !result.people.length) {
         toast('Aucun planning reconnu sur cette photo. Recadre le tableau et réessaie.', 4200);
         return;
