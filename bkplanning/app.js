@@ -408,7 +408,8 @@
       const n = w.people.filter((p) => M.work(p.days[i]).length).length;
       const mine = me && M.work(me.days[i]).length;
       const b = el('button', `day-pill${i === day ? ' active' : ''}${isCurrent && i === todayIdx() ? ' today' : ''}${alertsByDay.has(i) ? ' alert' : ''}${mine ? ' mine' : ''}`);
-      b.append(el('small', '', name), el('b', '', String(d.getDate())), el('i', '', `${n} pers.`));
+      b.append(el('small', '', name), el('b', '', String(d.getDate())), el('i', '', `${n} 👤`));
+      b.title = `${n} personnes au travail`;
       b.onclick = () => { day = i; renderDay(w); };
       return b;
     }));

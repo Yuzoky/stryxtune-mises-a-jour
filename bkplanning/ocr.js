@@ -402,8 +402,27 @@ const SheetReader = (() => {
 
   /* ---------- 4. Lignes (personnes) ---------- */
 
+  // Interligne réel : distance entre deux textes l'un sous l'autre dans une même colonne.
+  // (La hauteur des boîtes ne suffit pas : le téléphone les serre autour des lettres.)
+  function lineStep(frags, lh) {
+    const cells = frags.filter((f) => f.isCell);
+    const unit = median(cells.map((f) => f.w)) || 50;
+    const d = [];
+    for (const f of cells) {
+      let best = Infinity;
+      for (const g of cells) {
+        const dy = g.y - f.y;
+        if (dy > 0.5 * lh && dy < best && Math.abs(g.x - f.x) < 0.4 * unit) best = dy;
+      }
+      if (best < 8 * lh) d.push(best);
+    }
+    d.sort((a, b) => a - b);
+    return d.length >= 6 ? d[Math.floor(d.length * 0.2)] : 1.15 * lh;
+  }
+
   function findRows(frags, cols, headerY) {
     const lh = median(frags.filter((f) => f.isCell).map((f) => f.h)) || 20;
+    const step = lineStep(frags.filter((f) => f.y > headerY), lh);
     const midY = median(frags.filter((f) => f.isCell && f.y > headerY).map((f) => f.y));
     const firstX = Math.min(...cols.days.map((c) => c.xAt(midY)));
     const nameLimit = firstX - 0.55 * cols.pitch;
@@ -423,8 +442,8 @@ const SheetReader = (() => {
         continue;
       }
       const startNew = !cur
-        || (idMode ? RE.id.test(cur.frags[cur.frags.length - 1].t) : (f.y - cur.frags[cur.frags.length - 1].y) > 1.3 * lh)
-        || (f.y - cur.frags[cur.frags.length - 1].y) > 1.7 * lh;
+        || (idMode ? RE.id.test(cur.frags[cur.frags.length - 1].t) : (f.y - cur.frags[cur.frags.length - 1].y) > 1.3 * step)
+        || (f.y - cur.frags[cur.frags.length - 1].y) > 1.7 * step;
       if (startNew) { if (cur) rows.push(cur); cur = { frags: [f] }; } else cur.frags.push(f);
     }
     if (cur) rows.push(cur);
@@ -435,7 +454,7 @@ const SheetReader = (() => {
     }
     // Rien après la ligne Total (feuilles en dessous, texte vu par transparence…).
     const ti = rows.findIndex((r) => r.total);
-    return { rows: ti >= 0 ? rows.slice(0, ti + 1) : rows, headerY, lh };
+    return { rows: ti >= 0 ? rows.slice(0, ti + 1) : rows, headerY, lh, step };
   }
 
   // « SARA CHAN-BOUSSOURRA (25) » → { name: 'Sara Chan-Boussourra', id: '25' }
@@ -490,11 +509,11 @@ const SheetReader = (() => {
     });
   }
 
-  function assignAll(frags, cols, rows, lh) {
+  function assignAll(frags, cols, rows, lh, step) {
     const columns = [...cols.days, ...(cols.plan ? [cols.plan] : [])];
     // Chaque morceau du tableau va dans la colonne la plus proche (à sa hauteur).
-    const firstY = rows.length ? rows[0].top - 1.2 * lh : -Infinity;
-    const lastY = rows.length ? rows[rows.length - 1].top + 4 * lh : Infinity;
+    const firstY = rows.length ? rows[0].top - 1.1 * step : -Infinity;
+    const lastY = rows.length ? rows[rows.length - 1].top + 3.5 * step : Infinity;
     for (const c of columns) c.cellFrags = [];
     for (const f of frags) {
       if (f.y < firstY || f.y > lastY) continue;
@@ -508,13 +527,6 @@ const SheetReader = (() => {
       }
       if (best && bd < 0.5 * cols.pitch) best.cellFrags.push(f);
     }
-    // Interligne : écart entre deux lignes de texte d'une même case (ou d'un même nom).
-    const gaps = [];
-    for (const c of columns) {
-      const ys = c.cellFrags.map((f) => f.y).sort((x, y) => x - y);
-      for (let i = 1; i < ys.length; i++) if (ys[i] - ys[i - 1] > 0.6 * lh && ys[i] - ys[i - 1] < 1.7 * lh) gaps.push(ys[i] - ys[i - 1]);
-    }
-    const step = median(gaps) || 1.15 * lh;
     const tops = rows.map((r) => r.top);
     const rowPitch = median(tops.slice(1).map((t, i) => t - tops[i])) || 2 * step;
 
@@ -713,9 +725,9 @@ const SheetReader = (() => {
     const cols = findColumns(frags, headerY);
     const week = findWeek(frags, cols, now);
     if (!cols || cols.days.length < 4) return { ok: false, error: 'table', week: week.week, people: [], totals: null, angle: geo.angle };
-    const { rows, lh } = findRows(frags, cols, headerY);
+    const { rows, lh, step } = findRows(frags, cols, headerY);
     if (!rows.filter((r) => !r.total).length) return { ok: false, error: 'names', week: week.week, people: [], totals: null, angle: geo.angle };
-    const cells = assignAll(frags, cols, rows, lh);
+    const cells = assignAll(frags, cols, rows, lh, step);
 
     const people = [];
     let totals = null;

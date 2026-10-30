@@ -307,15 +307,15 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8p
 .seg.small button { min-height: 34px; font-size: 13.5px; }
 
 /* ---------- Vue jour ---------- */
-.day-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.day-pill { display: grid; justify-items: center; gap: 1px; padding: 9px 0 7px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+.day-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.day-pill { position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 0 7px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
 .day-pill small { font-size: 11px; font-weight: 700; color: var(--ink-2); text-transform: uppercase; }
 .day-pill b { font-size: 21px; font-weight: 800; }
-.day-pill i { font-style: normal; font-size: 10.5px; color: var(--ink-3); }
+.day-pill i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
 .day-pill.today b { color: var(--brand); }
 .day-pill.active { background: var(--pill-on); color: var(--pill-on-ink); border-color: var(--pill-on); }
 .day-pill.active small, .day-pill.active i { color: inherit; opacity: .8; }
-.day-pill.alert::after { content: ""; width: 6px; height: 6px; border-radius: 3px; background: var(--warn); margin-top: 2px; }
+.day-pill.alert::after { content: ""; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 4px; background: var(--warn); }
 .day-pill.mine i { color: var(--me-ink); opacity: 1; font-weight: 700; }
 .day-pill.active.mine i { color: inherit; }
 .tl-row.tl-head { min-height: 20px; padding: 0; }
