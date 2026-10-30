@@ -1,0 +1,71 @@
+# Fabrique l'application Android Planning BK (APK) et la publie dans la pré-version « bkplanning ».
+name: Planning BK Android
+
+on:
+  push:
+    paths:
+      - 'bkplanning/**'
+      - 'android-bk/**'
+      - '.github/workflows/bkplanning-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bkplanning-android
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      # Même clé de signature que Stryx Hub (android/signing/stryxmdp.p12), protégée par le
+      # secret STRYXMDP_SIGNING_PASSWORD : les mises à jour s'installent par-dessus sans rien effacer.
+      - name: Préparer la clé de signature
+        env:
+          SIGNING_PASSWORD: ${{ secrets.STRYXMDP_SIGNING_PASSWORD }}
+        run: |
+          KS=android/signing/stryxmdp.p12
+          if [ -z "$SIGNING_PASSWORD" ] || [ ! -f "$KS" ]; then
+            echo "::error::Clé de signature ou secret STRYXMDP_SIGNING_PASSWORD manquant."
+            exit 1
+          fi
+          echo "KS_FILE=$PWD/$KS" >> "$GITHUB_ENV"
+          echo "KS_PASSWORD=$SIGNING_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Vérifier la lecture des plannings (tests)
+        run: node android-bk/tests/run.js
+
+      - name: Compiler l'APK
+        run: gradle -p android-bk assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+
+      - name: Publier l'APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android-bk/app/build/outputs/apk/release/app-release.apk PlanningBK.apk
+          # Numéro de version lu par l'appli pour proposer la mise à jour.
+          echo "${{ github.run_number }}" > version.txt
+          gh release delete bkplanning --cleanup-tag --yes || true
+          gh release create bkplanning PlanningBK.apk version.txt \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Planning BK (Android) 1.0.${{ github.run_number }}" \
+            --notes "Application Android des managers : planning de l'équipe lu depuis la photo de la feuille, modifications, échanges, alertes heures, partage chiffré entre managers. Sur le téléphone : téléchargez **PlanningBK.apk** ci-dessous, ouvrez-le puis touchez **Installer** (autorisez l'installation d'applications inconnues si Android le demande). Ensuite, les mises à jour se font depuis l'appli (Réglages)."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlanningBK-apk
+          path: PlanningBK.apk

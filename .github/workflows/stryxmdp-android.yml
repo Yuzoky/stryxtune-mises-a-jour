@@ -1,0 +1,95 @@
+# Fabrique l'application Android StryxMDP (APK) et la publie dans la pré-version « stryxmdp ».
+name: StryxMDP Android
+
+on:
+  push:
+    paths:
+      - 'stryxmdp/**'
+      - 'android/**'
+      - '.github/workflows/stryxmdp-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stryxmdp-android
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      # Clé de signature permanente (indispensable pour que les mises à jour s'installent
+      # par-dessus sans effacer le coffre). Elle est créée une seule fois, protégée par le
+      # secret STRYXMDP_SIGNING_PASSWORD (connu uniquement de GitHub), puis conservée dans
+      # android/signing/. Sans ce secret, la clé est inutilisable.
+      - name: Préparer la clé de signature
+        env:
+          SIGNING_PASSWORD: ${{ secrets.STRYXMDP_SIGNING_PASSWORD }}
+        run: |
+          KS=android/signing/stryxmdp.p12
+          if [ -z "$SIGNING_PASSWORD" ]; then
+            echo "::warning::APK non fabriqué : ajoutez le secret STRYXMDP_SIGNING_PASSWORD (Settings › Secrets and variables › Actions) puis relancez."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ ${#SIGNING_PASSWORD} -lt 20 ]; then
+            echo "::error::Le secret STRYXMDP_SIGNING_PASSWORD doit faire au moins 20 caractères."
+            exit 1
+          fi
+          if [ ! -f "$KS" ]; then
+            mkdir -p android/signing
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias stryxmdp \
+              -keyalg RSA -keysize 4096 -validity 20000 \
+              -storepass:env SIGNING_PASSWORD -keypass:env SIGNING_PASSWORD -dname "CN=StryxMDP"
+            echo "NEW_KEY=1" >> "$GITHUB_ENV"
+          fi
+          echo "KS_FILE=$PWD/$KS" >> "$GITHUB_ENV"
+          echo "KS_PASSWORD=$SIGNING_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Compiler l'APK
+        if: env.SKIP != '1'
+        run: gradle -p android assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+
+      - name: Publier l'APK
+        if: env.SKIP != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk StryxMDP.apk
+          # Numéro de version lu par l'appli pour proposer la mise à jour.
+          echo "${{ github.run_number }}" > version.txt
+          gh release delete stryxmdp --cleanup-tag --yes || true
+          gh release create stryxmdp StryxMDP.apk version.txt \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Stryx Hub (Android) 1.0.${{ github.run_number }}" \
+            --notes "Application Android Stryx Hub (mots de passe et planning). Sur le téléphone : téléchargez **StryxMDP.apk** ci-dessous, ouvrez-le puis touchez **Installer** (autorisez l'installation d'applications inconnues si Android le demande). Ensuite, les mises à jour se font directement depuis l'appli."
+
+      # Première fois seulement : conserve la clé (protégée par le secret) dans le dépôt.
+      - name: Conserver la clé de signature
+        if: env.NEW_KEY == '1' && env.SKIP != '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git add android/signing/stryxmdp.p12
+          git commit -m "StryxMDP : clé de signature Android (protégée par mot de passe)"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - uses: actions/upload-artifact@v4
+        if: env.SKIP != '1'
+        with:
+          name: StryxMDP-apk
+          path: StryxMDP.apk

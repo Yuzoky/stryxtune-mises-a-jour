@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+def buildNumber = (project.findProperty('versionCode') ?: '1') as int
+
+android {
+    namespace 'com.stryx.bkplanning'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.stryx.bkplanning'
+        minSdk 24
+        targetSdk 34
+        // Numéro de build fourni par GitHub Actions : chaque version s'installe par-dessus la précédente.
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+        // Téléphones Android actuels uniquement (ARM) : APK plus léger avec la lecture de texte embarquée.
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+    }
+
+    signingConfigs {
+        release {
+            // Même clé que Stryx Hub (android/signing/stryxmdp.p12), protégée par un secret GitHub.
+            storeFile file(System.getenv('KS_FILE') ?: 'release.jks')
+            storePassword System.getenv('KS_PASSWORD')
+            keyAlias 'stryxmdp'
+            keyPassword System.getenv('KS_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    // Les fichiers de l'appli (dossier bkplanning/) sont embarqués dans l'APK.
+    sourceSets {
+        main {
+            assets.srcDirs = ['../../bkplanning']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Lecture de texte Google ML Kit, modèle embarqué : fonctionne hors ligne, rien n'est envoyé.
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+}
