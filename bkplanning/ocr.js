@@ -624,6 +624,8 @@ const SheetReader = (() => {
     for (let i = 1; i < slots.length; i++) if (slots[i].a < slots[i - 1].b) status = 'unsure';
     const out = slots.map(({ a, b }) => `${hhmm(a)}-${hhmm(b)}${b >= 24 * 60 ? '*' : ''}`);
     if (RE.leave.test(d) || RE.repos.test(d)) status = 'unsure';
+    // Créneau improbable (« 1:00-14:30 » au lieu de « 11:00-14:30 ») : à vérifier.
+    if (slots.some(({ a, b }) => b - a > 11 * 60 || (a >= 2 * 60 && a < 6 * 60))) status = 'unsure';
     // Horaires au quart d'heure : « 14:39 » est presque sûrement un chiffre mal lu.
     if (slots.some(({ a, b }) => a % 15 || b % 15)) status = 'unsure';
     if (times.some((x) => x.min >= 30 * 60)) status = 'unsure';
