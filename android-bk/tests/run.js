@@ -28,7 +28,7 @@ function fakeSheet(n) {
       if (r < 0.3) days.push([]);
       else if (r < 0.55) days.push([`${hh(pick([9, 11, 12]) * 60)}-${hh(pick([14, 15]) * 60 + pick([0, 30]))}`, `${hh(pick([17, 18, 19]) * 60)}-${hh(22 * 60)}`]);
       else if (r < 0.65) { const a = pick([21, 22]) * 60; const b = a + pick([180, 240, 270]); days.push([`${hh(a)}-${M.hhmm(b)}${b >= 1440 ? '*' : ''}`]); } else if (r < 0.7) days.push(['CP 04:00']);
-      else days.push([`${hh(pick([9, 10, 11, 12, 15, 18]) * 60)}-${hh(pick([14, 15, 16, 21, 22]) * 60 + pick([0, 30]))}`].filter((s) => M.validSlot(s)));
+      else days.push([`${hh(pick([9, 10, 11, 12, 15, 18]) * 60)}-${hh(pick([14, 15, 16, 21, 22]) * 60 + pick([0, 30]))}`].filter((s) => M.validSlot(s) && M.dayMinutes([s]) <= 11 * 60));
     }
     const planned = days.reduce((t, d) => t + M.dayMinutes(d), 0);
     people.push({ name: `PERSONNE ${String.fromCharCode(65 + i)}${String.fromCharCode(65 + ((i * 7) % 26))}`, id: String(10 + i), days, planned, contract: 24 * 60 });
